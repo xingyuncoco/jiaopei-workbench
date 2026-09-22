@@ -4,9 +4,9 @@
  */
 
 // Supabase 配置
-// 说明：anon key 设计为可公开，安全性依赖数据库的 RLS 行级策略
+// publishable key 设计为可公开，安全性依赖数据库的 RLS 行级策略
 const SUPABASE_URL = 'https://itcrmmkpblayymqvyzaf.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0Y3JtbWtwYmxheXltcXZ5emFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwMDE3ODMsImV4cCI6MjEwNTU3Nzc4M30.y7cwA-A4-F8DxwTrH0kZmnk8Q48weRM8VLZew-eBC4k'
+const supabaseAnonKey = 'sb_publishable_ZXRrPVhLS6CvOQV5JYnBmA_0PiaL0xT'
 
 // 通过全局变量 supabase 访问 CDN 加载的 SDK
 const supabaseClient = supabase.createClient(SUPABASE_URL, supabaseAnonKey)

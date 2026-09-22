@@ -800,16 +800,6 @@ const plans = {
 
     let text = `【${student.name} 今日作业规划】${formatFullDate(state.currentDate)}\n\n`;
 
-    // 顶部拼上今日共享备注（核心策略 / 今日预计规划）
-    try {
-      const { note } = await dailyNotesAPI.get(studentId, state.currentDate);
-      if (note) {
-        if (note.core_strategy) text += `🎯 今日核心策略：${note.core_strategy}\n`;
-        if (note.today_plan)    text += `📝 今日预计规划：${note.today_plan}\n`;
-        if (note.core_strategy || note.today_plan) text += '\n';
-      }
-    } catch (e) { /* 备注缺失不影响复制 */ }
-
     state.plans.forEach(plan => {
       const icon = plan.subject?.icon || '📝';
       const name = plan.subject?.name || '未知';
@@ -823,6 +813,16 @@ const plans = {
       if (plan.is_completed) text += ` · 已完成 ✅`;
       text += `\n`;
     });
+
+    // 规划条目之后追加今日共享备注（核心策略 / 今日预计规划）
+    try {
+      const { note } = await dailyNotesAPI.get(studentId, state.currentDate);
+      if (note && (note.core_strategy || note.today_plan)) {
+        text += '\n';
+        if (note.core_strategy) text += `🎯 核心策略：${note.core_strategy}\n`;
+        if (note.today_plan)    text += `📝 今日预计规划：${note.today_plan}\n`;
+      }
+    } catch (e) { /* 备注缺失不影响复制 */ }
 
     copyToClipboard(text);
   }

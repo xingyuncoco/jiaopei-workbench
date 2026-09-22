@@ -524,7 +524,7 @@ const plans = {
     router.navigate('subjects');
   },
 
-  showAddPlan() {
+  async showAddPlan() {
     const studentId = document.getElementById('planStudentSelect').value;
 
     if (!studentId) {
@@ -546,13 +546,17 @@ const plans = {
       subjectOptions += `<option value="${subject.id}">${subject.icon} ${subject.name}</option>`;
     });
 
-    // 快捷添加休息科目按钮（仅当库里还没休息科目时显示）
-    const hasBreak = state.subjects.some(s => s.is_break);
-    const addBreakBtn = hasBreak ? '' : `
-      <button type="button" class="link-btn" onclick="plans._quickAddBreak()">＋ 没有休息科目？点这里快速添加</button>
-    `;
+    // 库里没有休息科目时，自动建一个；同步到 state 与下拉，保证老师打开就有"休息"可选
+    if (!state.subjects.some(s => s.is_break)) {
+      try {
+        const { subject } = await subjectsAPI.create({ name: '休息', icon: '⏸️', is_break: true });
+        state.subjects.push(subject);
+        subjectOptions += `<option value="${subject.id}">${subject.icon} ${subject.name}</option>`;
+      } catch (error) {
+        console.error('自动创建休息科目失败:', error);
+      }
+    }
 
-    // 默认选项：作业（所有非休息科目都包含）+ 休息（休息科目自动只有 break）
     const lessonTypeOptions = window.LESSON_TYPES.map(lt =>
       `<option value="${lt.value}">${lt.label}</option>`
     ).join('');
@@ -562,7 +566,6 @@ const plans = {
         <div class="form-item">
           <label>科目 *</label>
           <select id="planSubject" onchange="plans._onSubjectChange()">${subjectOptions}</select>
-          ${addBreakBtn}
         </div>
         <div class="form-item">
           <label>课型 *</label>
@@ -610,35 +613,6 @@ const plans = {
     sel.innerHTML = window.LESSON_TYPES
       .map(lt => `<option value="${lt.value}">${lt.label}</option>`).join('');
     this._onTimeChange();
-  },
-
-  // 在添加规划弹窗里一键添加休息科目（不关闭弹窗）
-  async _quickAddBreak() {
-    if (state.subjects.some(s => s.is_break)) {
-      toast.error('已有休息科目');
-      return;
-    }
-    loading.show('正在添加休息科目...');
-    try {
-      const { subject } = await subjectsAPI.create({ name: '休息', icon: '⏸️', is_break: true });
-      state.subjects.push(subject);
-      toast.success('已添加休息科目');
-
-      // 刷新科目下拉，自动选中新加的休息科目
-      const sel = document.getElementById('planSubject');
-      sel.innerHTML = state.subjects
-        .map(s => `<option value="${s.id}">${s.icon} ${s.name}</option>`).join('');
-      const breakOption = Array.from(sel.options).find(o => o.text.includes('休息'));
-      if (breakOption) sel.value = breakOption.value;
-
-      // 隐藏快捷按钮（避免重复添加）
-      const btn = document.querySelector('.link-btn');
-      if (btn) btn.remove();
-    } catch (error) {
-      toast.error(error.message);
-    } finally {
-      loading.hide();
-    }
   },
 
   // 根据 start_time/end_time 自动算计划用时

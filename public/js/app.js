@@ -524,7 +524,7 @@ const plans = {
     router.navigate('subjects');
   },
 
-  async showAddPlan() {
+  showAddPlan() {
     const studentId = document.getElementById('planStudentSelect').value;
 
     if (!studentId) {
@@ -545,17 +545,6 @@ const plans = {
     state.subjects.forEach(subject => {
       subjectOptions += `<option value="${subject.id}">${subject.icon} ${subject.name}</option>`;
     });
-
-    // 库里没有休息科目时，自动建一个；同步到 state 与下拉，保证老师打开就有"休息"可选
-    if (!state.subjects.some(s => s.is_break)) {
-      try {
-        const { subject } = await subjectsAPI.create({ name: '休息', icon: '⏸️', is_break: true });
-        state.subjects.push(subject);
-        subjectOptions += `<option value="${subject.id}">${subject.icon} ${subject.name}</option>`;
-      } catch (error) {
-        console.error('自动创建休息科目失败:', error);
-      }
-    }
 
     const lessonTypeOptions = window.LESSON_TYPES.map(lt =>
       `<option value="${lt.value}">${lt.label}</option>`

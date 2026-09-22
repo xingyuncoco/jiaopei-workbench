@@ -3,7 +3,7 @@
  * 全局 API（从 window 读取）
  */
 
-const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI } = window;
+const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI, weekStatsAPI } = window;
 
 // 全局状态
 const state = {
@@ -1077,7 +1077,10 @@ const profile = {
 
       <div class="profile-section-head">
         <h3>各科水平对比</h3>
-        <button class="btn btn-primary btn-sm" onclick="profile.showAddModal()">＋ 记录学情</button>
+        <div class="profile-actions">
+          <button class="btn btn-outline btn-sm" onclick="profile.aiSummary()">✨ AI 周总结</button>
+          <button class="btn btn-primary btn-sm" onclick="profile.showAddModal()">＋ 记录学情</button>
+        </div>
       </div>
       <div class="assess-table">
         <div class="assess-row assess-row-head">
@@ -1215,8 +1218,93 @@ const profile = {
     } finally {
       loading.hide();
     }
+  },
+
+  // 生成 AI 周总结：聚合本周作业 + 历次学情，交给服务端代理调用 MiniMax
+  async aiSummary() {
+    const student = state.students.find(s => s.id === state.currentStudentId);
+    if (!student) return;
+
+    loading.show('AI 生成中...');
+    try {
+      const token = await authAPI.getAccessToken();
+      if (!token) {
+        toast.error('登录已失效，请重新登录');
+        return;
+      }
+
+      const [weekStart, weekEnd] = currentWeekRange();
+      const [weekStats, assessRes] = await Promise.all([
+        weekStatsAPI.fetch(student.id, weekStart, weekEnd),
+        assessmentsAPI.listByStudent(student.id)
+      ]);
+
+      const payload = {
+        student_name: student.name,
+        grade: student.grade,
+        enrolled_at: student.enrolled_at,
+        week_start: weekStart,
+        week_end: weekEnd,
+        week_stats: weekStats,
+        assessments: assessRes.assessments.map(a => ({
+          subject: a.subject?.name || '已删除科目',
+          type: ASSESS_TYPES[a.assess_type] || a.assess_type,
+          date: a.assess_date,
+          level: a.level,
+          weak_points: a.weak_points
+        }))
+      };
+
+      const resp = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
+
+      lastAiSummary = data.summary;
+      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      modal.show('✨ AI 周总结', `
+        <div class="ai-summary-box">
+          <pre class="ai-summary-text">${safe}</pre>
+          <div class="modal-footer">
+            <button class="btn btn-outline" onclick="modal.close()">关闭</button>
+            <button class="btn btn-primary" onclick="profile.copyAiSummary()">复制发给家长</button>
+          </div>
+        </div>
+      `);
+    } catch (error) {
+      console.error('AI 周总结失败:', error);
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
+  },
+
+  copyAiSummary() {
+    if (lastAiSummary) {
+      copyToClipboard(lastAiSummary);
+      toast.success('已复制');
+    }
   }
 };
+
+// 本周一到本周日的日期区间
+function currentWeekRange() {
+  const now = new Date();
+  const offset = (now.getDay() + 6) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - offset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return [start.toISOString().split('T')[0], end.toISOString().split('T')[0]];
+}
+
+let lastAiSummary = '';
 
 async function initProfilePage() {
   await profile.render();

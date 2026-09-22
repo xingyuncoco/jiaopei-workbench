@@ -29,6 +29,12 @@ window.authAPI = {
     if (error) throw error
   },
 
+  // 取当前会话 access_token，供调用自有后端接口时携带
+  async getAccessToken() {
+    const { data } = await supabaseClient.auth.getSession()
+    return data?.session?.access_token || null
+  },
+
   async getCurrentUser() {
     const { data, error } = await supabaseClient.auth.getSession()
     if (error) throw error
@@ -129,6 +135,52 @@ window.assessmentsAPI = {
 
     if (result.error) throw result.error
     return { success: true }
+  }
+}
+
+// 某学生某周期的作业统计，供 AI 周总结使用
+window.weekStatsAPI = {
+  async fetch(studentId, weekStart, weekEnd) {
+    const [plansRes, reportsRes] = await Promise.all([
+      supabaseClient
+        .from('homework_plans')
+        .select('id, is_completed, subject:subjects(id, name)')
+        .eq('student_id', studentId)
+        .gte('plan_date', weekStart)
+        .lte('plan_date', weekEnd),
+      supabaseClient
+        .from('homework_reports')
+        .select('plan_id, accuracy, subject:subjects(id, name)')
+        .eq('student_id', studentId)
+        .gte('plan_date', weekStart)
+        .lte('plan_date', weekEnd)
+    ])
+
+    if (plansRes.error) throw plansRes.error
+    if (reportsRes.error) throw reportsRes.error
+
+    // 按科目聚合：布置/完成次数 + 平均正确率
+    const stats = {}
+    ;(plansRes.data || []).forEach(p => {
+      const name = p.subject?.name || '未知'
+      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [] }
+      stats[name].total++
+      if (p.is_completed) stats[name].completed++
+    })
+    ;(reportsRes.data || []).forEach(r => {
+      const name = r.subject?.name || '未知'
+      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [] }
+      if (typeof r.accuracy === 'number') stats[name].accuracies.push(r.accuracy)
+    })
+
+    return Object.values(stats).map(s => ({
+      subject: s.subject,
+      total: s.total,
+      completed: s.completed,
+      avg_accuracy: s.accuracies.length
+        ? Math.round(s.accuracies.reduce((a, b) => a + b, 0) / s.accuracies.length)
+        : null
+    }))
   }
 }
 

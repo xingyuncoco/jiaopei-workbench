@@ -1093,6 +1093,23 @@ html, body {
   margin: 18px 0 10px;
 }
 
+.profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-summary-text {
+  margin: 0;
+  padding: 14px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  border-radius: 10px;
+  white-space: pre-wrap;
+}
+
 .profile-section-head h3 {
   font-size: 15px;
   color: var(--gray-800);

@@ -1,23 +1,19 @@
 /**
  * 直接使用 Supabase JavaScript SDK
- * 浏览器端直接连接数据库
- */
+ * 浏览器端直接连接数据�? */
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
-
-// Supabase 配置 - 从 localStorage 或硬编码获取
-const supabaseUrl = 'https://itcrmmkpblayymqvyzaf.supabase.co'
+// Supabase 配置 - �?localStorage 或硬编码获取
+const SUPABASE_URL = 'https://itcrmmkpblayymqvyzaf.supabase.co'
 const supabaseAnonKey = localStorage.getItem('supabase_anon_key') || ''
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// 通过全局变量 supabase 访问（由 CDN 加载提供�?const supabase = window.supabase.createClient(SUPABASE_URL, supabaseAnonKey)
 
-// 获取 token（从 localStorage）
-function getToken() {
+// 获取 token（从 localStorage�?function getToken() {
   return localStorage.getItem('auth_token') || '';
 }
 
 // 设置认证 token
-export function setAuthToken(token) {
+window.setAuthToken = function setAuthToken(token) {
   localStorage.setItem('auth_token', token)
   supabase.auth.setSession({
     access_token: token,
@@ -29,7 +25,7 @@ export function setAuthToken(token) {
 // 学生相关 API
 // =============================================
 
-export const studentsAPI = {
+window.studentsAPI = {
   async list() {
     const { data, error } = await supabase
       .from('students')
@@ -81,7 +77,7 @@ export const studentsAPI = {
 // 科目相关 API
 // =============================================
 
-export const subjectsAPI = {
+window.subjectsAPI = {
   async list() {
     const { data, error } = await supabase
       .from('subjects')
@@ -133,7 +129,7 @@ export const subjectsAPI = {
 // 规划相关 API
 // =============================================
 
-export const plansAPI = {
+window.plansAPI = {
   async list(params = {}) {
     let query = supabase
       .from('homework_plans')
@@ -206,10 +202,9 @@ export const plansAPI = {
 }
 
 // =============================================
-// 批改相关 API（简化版，无 AI）
-// =============================================
+// 批改相关 API（简化版，无 AI�?// =============================================
 
-export const reportsAPI = {
+window.reportsAPI = {
   async list(params = {}) {
     let query = supabase
       .from('homework_reports')
@@ -262,7 +257,7 @@ export const reportsAPI = {
 // 总结相关 API
 // =============================================
 
-export const summariesAPI = {
+window.summariesAPI = {
   async get(date) {
     const { data, error } = await supabase
       .from('daily_summaries')
@@ -315,15 +310,11 @@ export const summariesAPI = {
       ? Math.round(reports.reduce((a, r) => a + (r.accuracy || 0), 0) / reports.length)
       : 0
 
-    const detailText = `今日共${totalStudents || 0}名学生，${completedStudents}人完成作业。`
+    const detailText = `今日�?{totalStudents || 0}名学生，${completedStudents}人完成作业。`
 
-    const copyText = `【今日学习总结 ${date}】
-
-👥 学生情况：
-在册 ${totalStudents || 0} 人，完成作业 ${completedStudents} 人
-
-📊 各科完成情况：
-${Object.values(subjectStats).map(s => `${s.name}：${s.completed}/${s.total}`).join('\n')}
+    const copyText = `【今日学习总结 ${date}�?
+👥 学生情况�?在册 ${totalStudents || 0} 人，完成作业 ${completedStudents} �?
+📊 各科完成情况�?${Object.values(subjectStats).map(s => `${s.name}�?{s.completed}/${s.total}`).join('\n')}
 
 💡 ${detailText}`
 

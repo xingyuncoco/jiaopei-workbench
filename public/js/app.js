@@ -1,9 +1,9 @@
 /**
  * 教培工作台 - 主应用逻辑
- * 导入 Supabase API
+ * 全局 API（从 window 读取）
  */
 
-import { supabase, studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI } from './api.js';
+const { supabase, studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI } = window;
 
 // 全局状态
 const state = {

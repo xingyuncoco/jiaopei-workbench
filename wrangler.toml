@@ -1,7 +1,8 @@
 name = "jiaopei-workbench"
 compatibility_date = "2026-09-01"
-pages_build_output_dir = "./public"
 
-# 静态网站不需要 main 入口
+# Cloudflare Pages 配置
+pages_build_output_dir = "public"
+
 [assets]
-directory = "./public"
+directory = "public"

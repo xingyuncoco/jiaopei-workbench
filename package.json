@@ -2,8 +2,5 @@
   "name": "jiaopei-workbench",
   "version": "1.0.0",
   "private": true,
-  "description": "教培教师工作台 - 移动端H5应用",
-  "scripts": {
-    "deploy": "wrangler pages deploy public"
-  }
+  "description": "教培教师工作台 - 移动端H5应用"
 }

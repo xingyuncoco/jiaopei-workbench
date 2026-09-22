@@ -219,11 +219,15 @@ async function loadAllData() {
 
 // 首页初始化
 function initHomePage() {
+  // 回到首页时，强制把日期锁回今天（避免规划/总结页改了日期回来仍是旧日期）
+  state.currentDate = new Date().toISOString().split('T')[0];
   updateQuickList();
 }
 
 async function updateQuickList() {
   const quickList = document.getElementById('quickList');
+  const dateLabel = document.getElementById('quickListDate');
+  if (dateLabel) dateLabel.textContent = state.currentDate;
 
   try {
     const plansRes = await plansAPI.list({ date: state.currentDate });
@@ -420,6 +424,9 @@ async function initPlansPage() {
   updateStudentSelect('planStudentSelect');
   updateStudentSelect('correctStudentSelect');
   updateSubjectSelect('correctSubjectSelect');
+  // 默认选中第一个学生，避免"请先选择学生"提示造成误解
+  const planSel = document.getElementById('planStudentSelect');
+  if (planSel && !planSel.value && state.students.length > 0) planSel.value = state.students[0].id;
   await loadPlans();
 }
 

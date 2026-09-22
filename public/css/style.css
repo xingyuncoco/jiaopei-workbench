@@ -178,6 +178,18 @@ html, body {
   margin-bottom: 12px;
 }
 
+.quick-tips-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.quick-date {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
 .quick-list {
   display: flex;
   flex-direction: column;

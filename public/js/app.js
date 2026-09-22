@@ -4,7 +4,6 @@
  */
 
 const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI } = window;
-const supabase = window.supabase;
 
 // 全局状态
 const state = {

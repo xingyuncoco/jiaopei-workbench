@@ -3,14 +3,14 @@
  * 浏览器端直接连接数据库
  */
 
-// Supabase 配置 - 从 localStorage 获取
+// Supabase 配置
 const SUPABASE_URL = 'https://itcrmmkpblayymqvyzaf.supabase.co'
 const supabaseAnonKey = localStorage.getItem('supabase_anon_key') || ''
 
-// 通过全局变量 supabase 访问（由 CDN 加载提供）
+// 通过全局变量 supabase 访问
 const supabase = window.supabase.createClient(SUPABASE_URL, supabaseAnonKey)
 
-// 获取 token（从 localStorage）
+// 获取 token
 function getToken() {
   return localStorage.getItem('auth_token') || '';
 }
@@ -27,48 +27,48 @@ window.setAuthToken = function (token) {
 // 学生相关 API
 window.studentsAPI = {
   async list() {
-    const { data, error } = await supabase
+    const result = await supabase
       .from('students')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error) throw error
-    return { students: data }
+    if (result.error) throw result.error
+    return { students: result.data }
   },
 
-  async create(data) {
-    const { data: userData } = await supabase.auth.getUser()
-    const userId = userData?.user?.id
+  async create(studentData) {
+    const userResult = await supabase.auth.getUser()
+    const userId = userResult.data?.user?.id
 
-    const { data, error } = await supabase
+    const result = await supabase
       .from('students')
-      .insert({ ...data, user_id: userId })
+      .insert({ ...studentData, user_id: userId })
       .select()
       .single()
 
-    if (error) throw error
-    return { student: data }
+    if (result.error) throw result.error
+    return { student: result.data }
   },
 
-  async update(id, data) {
-    const { data: result, error } = await supabase
+  async update(id, studentData) {
+    const result = await supabase
       .from('students')
-      .update(data)
+      .update(studentData)
       .eq('id', id)
       .select()
       .single()
 
-    if (error) throw error
-    return { student: result }
+    if (result.error) throw result.error
+    return { student: result.data }
   },
 
   async delete(id) {
-    const { error } = await supabase
+    const result = await supabase
       .from('students')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (result.error) throw result.error
     return { success: true }
   }
 }
@@ -76,48 +76,48 @@ window.studentsAPI = {
 // 科目相关 API
 window.subjectsAPI = {
   async list() {
-    const { data, error } = await supabase
+    const result = await supabase
       .from('subjects')
       .select('*')
       .order('created_at', { ascending: true })
 
-    if (error) throw error
-    return { subjects: data }
+    if (result.error) throw result.error
+    return { subjects: result.data }
   },
 
-  async create(data) {
-    const { data: userData } = await supabase.auth.getUser()
-    const userId = userData?.user?.id
+  async create(subjectData) {
+    const userResult = await supabase.auth.getUser()
+    const userId = userResult.data?.user?.id
 
-    const { data, error } = await supabase
+    const result = await supabase
       .from('subjects')
-      .insert({ ...data, user_id: userId })
+      .insert({ ...subjectData, user_id: userId })
       .select()
       .single()
 
-    if (error) throw error
-    return { subject: data }
+    if (result.error) throw result.error
+    return { subject: result.data }
   },
 
-  async update(id, data) {
-    const { data: result, error } = await supabase
+  async update(id, subjectData) {
+    const result = await supabase
       .from('subjects')
-      .update(data)
+      .update(subjectData)
       .eq('id', id)
       .select()
       .single()
 
-    if (error) throw error
-    return { subject: result }
+    if (result.error) throw result.error
+    return { subject: result.data }
   },
 
   async delete(id) {
-    const { error } = await supabase
+    const result = await supabase
       .from('subjects')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (result.error) throw result.error
     return { success: true }
   }
 }
@@ -140,19 +140,19 @@ window.plansAPI = {
       query = query.eq('student_id', params.student_id)
     }
 
-    const { data, error } = await query.order('created_at', { ascending: true })
+    const result = await query.order('created_at', { ascending: true })
 
-    if (error) throw error
-    return { plans: data }
+    if (result.error) throw result.error
+    return { plans: result.data }
   },
 
-  async create(data) {
-    const { data: userData } = await supabase.auth.getUser()
-    const userId = userData?.user?.id
+  async create(planData) {
+    const userResult = await supabase.auth.getUser()
+    const userId = userResult.data?.user?.id
 
-    const { data: result, error } = await supabase
+    const result = await supabase
       .from('homework_plans')
-      .insert({ ...data, user_id: userId })
+      .insert({ ...planData, user_id: userId })
       .select(`
         *,
         student:students(id, name, grade),
@@ -160,14 +160,14 @@ window.plansAPI = {
       `)
       .single()
 
-    if (error) throw error
-    return { plan: result }
+    if (result.error) throw result.error
+    return { plan: result.data }
   },
 
-  async update(id, data) {
-    const { data: result, error } = await supabase
+  async update(id, planData) {
+    const result = await supabase
       .from('homework_plans')
-      .update(data)
+      .update(planData)
       .eq('id', id)
       .select(`
         *,
@@ -176,8 +176,8 @@ window.plansAPI = {
       `)
       .single()
 
-    if (error) throw error
-    return { plan: result }
+    if (result.error) throw result.error
+    return { plan: result.data }
   },
 
   async toggleComplete(id, isCompleted) {
@@ -185,12 +185,12 @@ window.plansAPI = {
   },
 
   async delete(id) {
-    const { error } = await supabase
+    const result = await supabase
       .from('homework_plans')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (result.error) throw result.error
     return { success: true }
   }
 }
@@ -213,14 +213,14 @@ window.reportsAPI = {
       query = query.eq('student_id', params.student_id)
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false })
+    const result = await query.order('created_at', { ascending: false })
 
-    if (error) throw error
-    return { reports: data }
+    if (result.error) throw result.error
+    return { reports: result.data }
   },
 
   async get(id) {
-    const { data, error } = await supabase
+    const result = await supabase
       .from('homework_reports')
       .select(`
         *,
@@ -230,17 +230,17 @@ window.reportsAPI = {
       .eq('id', id)
       .single()
 
-    if (error) throw error
-    return { report: data }
+    if (result.error) throw result.error
+    return { report: result.data }
   },
 
   async delete(id) {
-    const { error } = await supabase
+    const result = await supabase
       .from('homework_reports')
       .delete()
       .eq('id', id)
 
-    if (error) throw error
+    if (result.error) throw result.error
     return { success: true }
   }
 }
@@ -248,61 +248,64 @@ window.reportsAPI = {
 // 总结相关 API
 window.summariesAPI = {
   async get(date) {
-    const { data, error } = await supabase
+    const result = await supabase
       .from('daily_summaries')
       .select('*')
       .eq('summary_date', date)
       .single()
 
-    if (error && error.code !== 'PGRST116') throw error
-    return { summary: data || null }
+    if (result.error && result.error.code !== 'PGRST116') throw result.error
+    return { summary: result.data || null }
   },
 
   async generate(date) {
-    const { count: totalStudents } = await supabase
+    const countResult = await supabase
       .from('students')
       .select('*', { count: 'exact', head: true })
 
-    const { data: plans } = await supabase
+    const totalStudents = countResult.count || 0
+
+    const plansResult = await supabase
       .from('homework_plans')
       .select(`*, subject:subjects(id, name)`)
       .eq('plan_date', date)
 
-    const { data: reports } = await supabase
+    const reportsResult = await supabase
       .from('homework_reports')
       .select(`*, subject:subjects(id, name)`)
       .eq('plan_date', date)
 
+    const plans = plansResult.data || []
+    const reports = reportsResult.data || []
+
     const subjectStats = {}
-    if (plans) {
-      plans.forEach(p => {
-        const name = p.subject?.name || '未知'
-        if (!subjectStats[name]) {
-          subjectStats[name] = { name, total: 0, completed: 0, accuracies: [] }
-        }
-        subjectStats[name].total++
-        if (p.is_completed) subjectStats[name].completed++
-      })
-    }
+    plans.forEach(p => {
+      const name = p.subject?.name || '未知'
+      if (!subjectStats[name]) {
+        subjectStats[name] = { name, total: 0, completed: 0, accuracies: [] }
+      }
+      subjectStats[name].total++
+      if (p.is_completed) subjectStats[name].completed++
+    })
 
     const completedStudents = new Set(
-      plans?.filter(p => p.is_completed).map(p => p.student_id) || []
+      plans.filter(p => p.is_completed).map(p => p.student_id)
     ).size
 
-    const { data: userData } = await supabase.auth.getUser()
-    const userId = userData?.user?.id
+    const userResult = await supabase.auth.getUser()
+    const userId = userResult.data?.user?.id
 
-    const avgAccuracy = reports?.length > 0
+    const avgAccuracy = reports.length > 0
       ? Math.round(reports.reduce((a, r) => a + (r.accuracy || 0), 0) / reports.length)
       : 0
 
-    const detailText = `今日共${totalStudents || 0}名学生，${completedStudents}人完成作业。`
+    const detailText = `今日共${totalStudents}名学生，${completedStudents}人完成作业。`
 
     return {
       summary: {
         summary_date: date,
         user_id: userId,
-        total_students: totalStudents || 0,
+        total_students: totalStudents,
         completed_count: completedStudents,
         avg_accuracy: avgAccuracy,
         subject_summary: Object.values(subjectStats),

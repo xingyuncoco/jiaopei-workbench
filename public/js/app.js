@@ -172,6 +172,34 @@ async function handleLogout() {
   showLogin();
 }
 
+// 标准科目清单（初中九科）
+const DEFAULT_SUBJECTS = [
+  { name: '语文', icon: '📖' },
+  { name: '数学', icon: '📐' },
+  { name: '英语', icon: '📝' },
+  { name: '物理', icon: '🧲' },
+  { name: '化学', icon: '🧪' },
+  { name: '生物', icon: '🧬' },
+  { name: '地理', icon: '🌍' },
+  { name: '历史', icon: '📜' },
+  { name: '道法', icon: '⚖️' }
+];
+
+// 补齐缺失的标准科目：已存在的按名称跳过，可重复执行
+async function ensureDefaultSubjects() {
+  const existing = new Set(state.subjects.map(s => s.name));
+  const missing = DEFAULT_SUBJECTS.filter(s => !existing.has(s.name));
+
+  for (const subj of missing) {
+    try {
+      const { subject } = await subjectsAPI.create(subj);
+      state.subjects.push(subject);
+    } catch (error) {
+      console.error(`创建科目「${subj.name}」失败:`, error);
+    }
+  }
+}
+
 async function loadAllData() {
   try {
     const studentsRes = await studentsAPI.list();
@@ -180,19 +208,7 @@ async function loadAllData() {
     const subjectsRes = await subjectsAPI.list();
     state.subjects = subjectsRes.subjects || [];
 
-    if (state.subjects.length === 0) {
-      const defaultSubjects = [
-        { name: '数学', icon: '📐' },
-        { name: '英语', icon: '📝' },
-        { name: '语文', icon: '📖' },
-        { name: '科学', icon: '🔬' }
-      ];
-      for (const subj of defaultSubjects) {
-        try { await subjectsAPI.create(subj); } catch (e) {}
-      }
-      const newSubjectsRes = await subjectsAPI.list();
-      state.subjects = newSubjectsRes.subjects || [];
-    }
+    await ensureDefaultSubjects();
   } catch (error) {
     console.error('加载数据失败:', error);
     toast.error('数据加载失败，请刷新重试');

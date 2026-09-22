@@ -10,8 +10,19 @@ alter table subjects add column if not exists default_lesson_types text[] not nu
 alter table homework_plans add column if not exists start_time time;
 alter table homework_plans add column if not exists end_time time;
 alter table homework_plans add column if not exists duration_minutes int;
-alter table homework_plans add column if not exists lesson_type text not null default 'homework'
-  check (lesson_type in ('homework','practice','test','hardpoint','class','oneon_tt1','break'));
+alter table homework_plans add column if not exists lesson_type text not null default 'homework';
+
+-- 重建 check 约束（去掉 'break'），兼容老库已经建过约束的情况
+do $$
+begin
+  alter table homework_plans drop constraint if exists homework_plans_lesson_type_check;
+exception when others then null;
+end $$;
+-- 历史数据兜底：若有 'break' 统一视为 'homework'
+update homework_plans set lesson_type = 'homework' where lesson_type = 'break';
+alter table homework_plans add constraint homework_plans_lesson_type_check
+  check (lesson_type in ('homework','practice','test','hardpoint','class','oneon_tt1'));
+
 alter table homework_plans add column if not exists core_strategy text;
 alter table homework_plans add column if not exists today_plan text;
 alter table homework_plans add column if not exists note text;

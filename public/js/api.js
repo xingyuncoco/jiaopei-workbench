@@ -18,8 +18,7 @@ window.LESSON_TYPES = [
   { value: 'test',      label: '测试' },
   { value: 'hardpoint', label: '难点讲解' },
   { value: 'class',     label: '小班课' },
-  { value: 'oneon_tt1', label: '一对一' },
-  { value: 'break',     label: '休息' }
+  { value: 'oneon_tt1', label: '一对一' }
 ]
 
 /**

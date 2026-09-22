@@ -126,6 +126,21 @@ window.summaryHistoryAPI = {
     return { items: result.data }
   },
 
+  // 获取某学生在某日期范围内的日常总结
+  async listByStudentAndDateRange(studentId, startDate, endDate) {
+    let q = supabaseClient
+      .from('summary_history')
+      .select('*')
+      .eq('kind', 'daily')
+      .eq('student_id', studentId)
+      .gte('period_start', startDate)
+      .lte('period_end', endDate)
+      .order('period_start', { ascending: true })
+    const result = await q
+    if (result.error) throw result.error
+    return { items: result.data }
+  },
+
   async get(id) {
     const result = await supabaseClient
       .from('summary_history')
@@ -242,13 +257,13 @@ window.weekStatsAPI = {
     const [plansRes, reportsRes] = await Promise.all([
       supabaseClient
         .from('homework_plans')
-        .select('id, is_completed, subject:subjects(id, name)')
+        .select('id, is_completed, plan_date, subject:subjects(id, name)')
         .eq('student_id', studentId)
         .gte('plan_date', weekStart)
         .lte('plan_date', weekEnd),
       supabaseClient
         .from('homework_reports')
-        .select('plan_id, accuracy, subject:subjects(id, name)')
+        .select('plan_id, accuracy, plan_date, total_questions, correct_count, wrong_count, blank_count, weak_points, overall_advice, subject:subjects(id, name)')
         .eq('student_id', studentId)
         .gte('plan_date', weekStart)
         .lte('plan_date', weekEnd)
@@ -257,28 +272,67 @@ window.weekStatsAPI = {
     if (plansRes.error) throw plansRes.error
     if (reportsRes.error) throw reportsRes.error
 
-    // 按科目聚合：布置/完成次数 + 平均正确率
+    // 按科目聚合：布置/完成次数 + 平均正确率 + 薄弱点
     const stats = {}
     ;(plansRes.data || []).forEach(p => {
       const name = p.subject?.name || '未知'
-      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [] }
+      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [], weakPoints: new Set(), advices: [] }
       stats[name].total++
       if (p.is_completed) stats[name].completed++
     })
     ;(reportsRes.data || []).forEach(r => {
       const name = r.subject?.name || '未知'
-      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [] }
+      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [], weakPoints: new Set(), advices: [] }
       if (typeof r.accuracy === 'number') stats[name].accuracies.push(r.accuracy)
+      // 收集薄弱点
+      if (r.weak_points) {
+        String(r.weak_points).split(/[；;]/).map(s => s.trim()).filter(Boolean).forEach(w => stats[name].weakPoints.add(w))
+      }
+      if (r.overall_advice) stats[name].advices.push(r.overall_advice)
     })
 
-    return Object.values(stats).map(s => ({
-      subject: s.subject,
-      total: s.total,
-      completed: s.completed,
-      avg_accuracy: s.accuracies.length
-        ? Math.round(s.accuracies.reduce((a, b) => a + b, 0) / s.accuracies.length)
-        : null
-    }))
+    // 按日期聚合（每天的作业情况）
+    const dailyStats = {}
+    const dates = []
+    for (let d = new Date(weekStart); d <= new Date(weekEnd); d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0]
+      dates.push(dateStr)
+      dailyStats[dateStr] = { date: dateStr, hasHomework: false, completed: false, accuracy: null }
+    }
+    ;(plansRes.data || []).forEach(p => {
+      const dateStr = p.plan_date
+      if (dailyStats[dateStr]) {
+        dailyStats[dateStr].hasHomework = true
+        if (p.is_completed) dailyStats[dateStr].completed = true
+      }
+    })
+    ;(reportsRes.data || []).forEach(r => {
+      const dateStr = r.plan_date
+      if (dailyStats[dateStr]) {
+        dailyStats[dateStr].accuracy = r.accuracy
+      }
+    })
+
+    // 汇总所有薄弱点
+    const allWeakPoints = new Set()
+    Object.values(stats).forEach(s => {
+      s.weakPoints.forEach(w => allWeakPoints.add(w))
+    })
+
+    return {
+      bySubject: Object.values(stats).map(s => ({
+        subject: s.subject,
+        total: s.total,
+        completed: s.completed,
+        avg_accuracy: s.accuracies.length
+          ? Math.round(s.accuracies.reduce((a, b) => a + b, 0) / s.accuracies.length)
+          : null,
+        weak_points: [...s.weakPoints],
+        advices: s.advices
+      })),
+      daily: dates.map(d => dailyStats[d]),
+      weekWeakPoints: [...allWeakPoints]
+    }
   }
 }
 

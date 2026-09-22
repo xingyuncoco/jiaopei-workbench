@@ -1757,11 +1757,13 @@ const summary = {
       if (!token) { toast.error('登录已失效'); return; }
 
       const [weekStart, weekEnd] = currentWeekRange();
-      const [weekStats, assessRes] = await Promise.all([
+      const [weekStats, assessRes, dailySummariesRes] = await Promise.all([
         weekStatsAPI.fetch(studentId, weekStart, weekEnd),
-        assessmentsAPI.listByStudent(studentId)
+        assessmentsAPI.listByStudent(studentId),
+        summaryHistoryAPI.listByStudentAndDateRange(studentId, weekStart, weekEnd)
       ]);
 
+      // weekStats 现在返回 { bySubject, daily, weekWeakPoints }
       const payload = {
         mode: 'weekly',
         student_name: student.name,
@@ -1769,7 +1771,10 @@ const summary = {
         enrolled_at: student.enrolled_at,
         week_start: weekStart,
         week_end: weekEnd,
-        week_stats: weekStats,
+        week_stats_by_subject: weekStats.bySubject || [],
+        week_daily: weekStats.daily || [],
+        week_weak_points: weekStats.weekWeakPoints || [],
+        week_daily_summaries: dailySummariesRes.items || [],
         assessments: assessRes.assessments.map(a => ({
           subject: a.subject?.name || '已删除科目',
           type: ASSESS_TYPES[a.assess_type] || a.assess_type,

@@ -1690,12 +1690,16 @@ const summary = {
       if (!token) { toast.error('登录已失效'); return; }
 
       const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
+      const studentStats = stats.students[0] || {};
+
       const payload = {
         mode: 'daily',
         date: state.currentDate,
         student_name: student.name,
         grade: student.grade,
         subjects: stats.subjects,
+        student_reports: studentStats.reports || [],
+        weak_points: studentStats.weak_points || [],
         teacher_note: teacherNote
       };
       const resp = await fetch('/api/summarize', {

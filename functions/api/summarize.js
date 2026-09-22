@@ -30,14 +30,31 @@ const SYSTEM_PROMPT_HOMEWORK = [
 ].join('');
 
 const SYSTEM_PROMPT_DAILY = [
-  '你是一名教培机构的资深老师，根据今天该生的作业数据和老师提交的反馈，给家长写一段日常总结。',
-  '要求：',
-  '1. 语气亲切专业，像和家长面对面沟通；',
-  '2. 必须结合老师填写的内容（今天做了什么 / 孩子实际反馈 / 下一步计划），不要忽略任何一项；',
-  '3. 数据中提供的各科完成情况、正確率也要写入，但不堆砌数字；',
-  '4. 给出 1-2 条家长可在家里配合的具体行动；',
-  '5. 200 字以内，自然分段，不使用 markdown 符号和表情。'
-].join('');
+  '你是一名教培机构的资深老师，根据今天该生的作业数据和老师提交的反馈，给家长写一份结构化的日常学习报告。',
+  '',
+  '【输出格式要求 - 必须严格遵守】',
+  '分四个部分，每部分用空行分隔，自然段落，不使用 markdown 符号：',
+  '',
+  '一、今日学习情况',
+  '   - 汇总今天各科作业完成情况与正确率',
+  '   - 指出各科存在的薄弱点（如有）',
+  '   - 描述孩子的整体表现和状态',
+  '',
+  '二、老师反馈',
+  '   - 引用老师填写的反馈内容',
+  '   - 对孩子的具体表现进行点评',
+  '',
+  '三、明日计划',
+  '   - 根据今天的表现制定针对性的学习安排',
+  '   - 明确需要重点关注和突破的内容',
+  '',
+  '四、家庭配合建议',
+  '   - 给出 2-3 条具体、可操作的家庭配合行动',
+  '   - 如需巩固薄弱点，提供具体的练习方向',
+  '',
+  '【语气要求】',
+  '亲切专业，像和家长面对面沟通；数据有根有据，不空泛套话。'
+].join('\n');
 
 const SYSTEM_PROMPT_WEEKLY = [
   '你是一名教培机构的资深老师，根据机构提供的数据给学生家长写本周学习反馈。',
@@ -66,13 +83,27 @@ function buildHomeworkPrompt(p) {
   return lines.join('\n');
 }
 
-// 日常总结：单生按日数据
+// 日常总结：单生按日数据（包含各科详细批改数据）
 function buildDailyPrompt(p) {
   const lines = [];
   lines.push(`日期：${p.date}`);
   lines.push(`学生：${p.student_name || '未指定'}${p.grade ? '（' + p.grade + '）' : ''}`);
-  if (p.subjects && p.subjects.length) {
-    lines.push('各科今日作业情况：');
+
+  // 各科作业详细数据
+  if (p.student_reports && p.student_reports.length) {
+    lines.push('');
+    lines.push('【各科作业批改详情】');
+    p.student_reports.forEach(r => {
+      const accStr = r.accuracy != null ? `正确率${r.accuracy}%` : '未批改';
+      const detail = r.total ? `（${r.correct}对/${r.wrong}错/${r.blank}空）` : '';
+      const weak = r.weak_points ? `薄弱点：${r.weak_points}` : '';
+      const advice = r.advice ? `建议：${r.advice}` : '';
+      lines.push(`- ${r.subject}：${accStr} ${detail}`);
+      if (weak) lines.push(`  ${weak}`);
+      if (advice) lines.push(`  ${advice}`);
+    });
+  } else if (p.subjects && p.subjects.length) {
+    lines.push('各科作业情况：');
     p.subjects.forEach(s => {
       const pct = s.total ? Math.round((s.completed / s.total) * 100) : 0;
       lines.push(`- ${s.subject}：布置${s.total}次，完成${s.completed}次（${pct}%）`);
@@ -80,11 +111,22 @@ function buildDailyPrompt(p) {
   } else {
     lines.push('今日无作业数据。');
   }
-  if (p.teacher_note && p.teacher_note.trim()) {
-    lines.push(`老师反馈（必写入）：${p.teacher_note.trim()}`);
-  } else {
-    lines.push('老师反馈：未填写');
+
+  // 薄弱点汇总
+  if (p.weak_points && p.weak_points.length) {
+    lines.push('');
+    lines.push(`【薄弱点汇总】${p.weak_points.join('、')}`);
   }
+
+  // 老师反馈（必写入）
+  if (p.teacher_note && p.teacher_note.trim()) {
+    lines.push('');
+    lines.push(`【老师反馈】${p.teacher_note.trim()}`);
+  } else {
+    lines.push('');
+    lines.push('【老师反馈】未填写');
+  }
+
   return lines.join('\n');
 }
 

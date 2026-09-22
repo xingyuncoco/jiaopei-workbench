@@ -1167,6 +1167,80 @@ html, body {
   font-size: 14px;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 历史记录 */
+.history-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--gray-200);
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.history-head h4 {
+  font-size: 14px;
+  color: var(--gray-700);
+  font-weight: 600;
+}
+
+.history-empty {
+  font-size: 13px;
+  color: var(--gray-400);
+  text-align: center;
+  padding: 16px 0;
+}
+
+.history-card {
+  background: var(--white);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  cursor: pointer;
+}
+
+.history-card:hover {
+  background: var(--gray-50);
+}
+
+.history-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.history-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.history-card-date {
+  font-size: 11px;
+  color: var(--gray-400);
+}
+
+.history-card-preview {
+  font-size: 12px;
+  color: var(--gray-500);
+  line-height: 1.5;
+}
+
+.history-clean {
+  margin: 24px 0 8px;
+  text-align: center;
+}
+
 .profile-section-head h3 {
   font-size: 15px;
   color: var(--gray-800);

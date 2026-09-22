@@ -856,18 +856,12 @@ const correct = {
 
 // 总结页面：作业情况 / 日常 / 周总结 三个板块
 async function initSummaryPage() {
-  // 默认展示第一个板块，避免第一次进入时空白
+  // 1. 默认作业情况 Tab，但不自动加载（要求手动选学生+点生成）
   if (!summary.currentTab) summary.currentTab = 'homework';
-  document.getElementById('summaryDate').textContent = formatDate(state.currentDate);
-  const dailyDateEl = document.getElementById('dailyDate');
-  if (dailyDateEl) dailyDateEl.textContent = formatDate(state.currentDate);
-  // 学生下拉（周总结板块用）
-  const sel = document.getElementById('weeklyStudent');
-  if (sel) {
-    sel.innerHTML = '<option value="">请选择学生...</option>' +
-      state.students.map(s => `<option value="${s.id}">${s.name}${s.grade ? '（' + s.grade + '）' : ''}</option>`).join('');
-  }
-  await summary.loadHomework();
+  summary.refreshStudentOptions();
+  summary.refreshDateLabels();
+  // 默认展示第一个 Tab，但不调用 AI
+  summary.switchTab('homework');
 }
 
 const summary = {
@@ -875,7 +869,37 @@ const summary = {
   dailyAi: '',
   weeklyAi: '',
 
-  // 切换 Tab（被 index.html onclick 直接调用）
+  // === 通用 ===
+  refreshDateLabels() {
+    const s = formatDate(state.currentDate);
+    const a = document.getElementById('summaryDate');
+    const b = document.getElementById('dailyDate');
+    if (a) a.textContent = s;
+    if (b) b.textContent = s;
+  },
+
+  refreshStudentOptions() {
+    const opts = '<option value="">请选择学生...</option>' +
+      state.students.map(s => `<option value="${s.id}">${s.name}${s.grade ? '（' + s.grade + '）' : ''}</option>`).join('');
+    ['homeworkStudent', 'dailyStudent', 'weeklyStudent'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = opts;
+    });
+    // 重置按钮禁用
+    this.onStudentChange(this.currentTab);
+  },
+
+  onStudentChange(tabName) {
+    const selId = { homework: 'homeworkStudent', daily: 'dailyStudent', weekly: 'weeklyStudent' }[tabName];
+    const btnId = { homework: 'homeworkGenerateBtn', daily: 'dailyGenerateBtn', weekly: 'weeklyGenerateBtn' }[tabName];
+    const sel = document.getElementById(selId);
+    const btn = document.getElementById(btnId);
+    if (sel && btn) btn.disabled = !sel.value;
+    // 选学生后立即拉历史
+    if (sel && sel.value) this.loadHistory(tabName, sel.value);
+    else this.loadHistory(tabName, null);
+  },
+
   switchTab(name) {
     this.currentTab = name;
     document.querySelectorAll('.summary-tab').forEach(el => el.classList.remove('active'));
@@ -886,97 +910,170 @@ const summary = {
       .find(el => el.textContent.trim() === labels[name]);
     if (tabBtn) tabBtn.classList.add('active');
     document.getElementById(panels[name]).hidden = false;
-
-    if (name === 'homework') this.loadHomework();
-    if (name === 'daily') {
-      const el = document.getElementById('dailyDate');
-      if (el) el.textContent = formatDate(state.currentDate);
-    }
-    if (name === 'weekly') {
-      this.refreshWeeklyStudent();
-    }
+    this.refreshDateLabels();
   },
 
-  // 日期切换：作业情况 + 日常总结同步
   changeDate(delta) {
     const date = new Date(state.currentDate);
     date.setDate(date.getDate() + delta);
     state.currentDate = date.toISOString().split('T')[0];
-    document.getElementById('summaryDate').textContent = formatDate(state.currentDate);
-    const dailyDateEl = document.getElementById('dailyDate');
-    if (dailyDateEl) dailyDateEl.textContent = formatDate(state.currentDate);
-    if (this.currentTab === 'homework') this.loadHomework();
+    this.refreshDateLabels();
   },
 
-  // === 板块一：作业情况（本地生成，保留原逻辑） ===
-  async loadHomework() {
-    const contentEl = document.getElementById('summaryContent');
-    const actionsEl = document.getElementById('summaryActions');
-    loading.show('加载中...');
+  // === 历史记录 ===
+  async loadHistory(tabName, studentId) {
+    const kind = { homework: 'homework', daily: 'daily', weekly: 'weekly' }[tabName];
+    const container = document.getElementById({
+      homework: 'homeworkHistory', daily: 'dailyHistory', weekly: 'weeklyHistory'
+    }[tabName]);
+    if (!container) return;
+
     try {
-      const res = await summariesAPI.get(state.currentDate);
-      if (res.summary) {
-        this.renderHomework(res.summary);
-        actionsEl.style.display = 'flex';
-      } else {
-        contentEl.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">📊</div>
-            <p class="empty-state-text">暂无总结</p>
-            <button class="btn btn-primary" onclick="summary.generateHomework()">生成今日总结</button>
-          </div>`;
-        actionsEl.style.display = 'none';
+      const { items } = await summaryHistoryAPI.list(kind, studentId || null);
+      if (!items || items.length === 0) {
+        container.innerHTML = '<p class="history-empty">暂无历史记录</p>';
+        return;
       }
+      container.innerHTML = items.map(item => {
+        const dt = new Date(item.created_at);
+        const dateStr = dt.toLocaleString('zh-CN', { hour12: false });
+        const student = state.students.find(s => s.id === item.student_id);
+        const title = student ? student.name : '（已删除学生）';
+        return `
+          <div class="history-card" onclick="summary.showHistoryItem('${item.id}')">
+            <div class="history-card-head">
+              <span class="history-card-title">${title}</span>
+              <span class="history-card-date">${dateStr}</span>
+            </div>
+            <div class="history-card-preview">${this._truncate(item.content, 80)}</div>
+          </div>`;
+      }).join('');
     } catch (error) {
-      contentEl.innerHTML = '<p class="empty-tip">加载失败</p>';
+      container.innerHTML = '<p class="history-empty">加载历史失败</p>';
+    }
+  },
+
+  _truncate(text, n) {
+    if (!text) return '';
+    const safe = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return safe.length > n ? safe.slice(0, n) + '...' : safe;
+  },
+
+  async showHistoryItem(id) {
+    const { items } = await summaryHistoryAPI.list(this.currentTab, null);
+    const item = (items || []).find(x => x.id === id);
+    if (!item) return;
+    const dt = new Date(item.created_at);
+    const dateStr = dt.toLocaleString('zh-CN', { hour12: false });
+    const teacherNote = item.teacher_note ? `<div class="ai-summary-meta">📝 老师反馈：${item.teacher_note}</div>` : '';
+    const safe = item.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    modal.show(`${dateStr}`, `
+      <div class="ai-summary-box">
+        ${teacherNote}
+        <pre class="ai-summary-text">${safe}</pre>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="modal.close()">关闭</button>
+          <button class="btn btn-primary" onclick="summary.copyHistoryContent(\`${item.content.replace(/`/g, '\\`').replace(/\\/g, '\\\\').replace(/\$/g, '\\$')}\`)">📋 复制</button>
+        </div>
+      </div>
+    `);
+  },
+
+  copyHistoryContent(text) {
+    copyToClipboard(text);
+    toast.success('已复制');
+  },
+
+  showClearDialog() {
+    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+    modal.show('🗑 清理历史记录', `
+      <div class="modal-form">
+        <p style="margin-bottom:12px;color:var(--gray-500);font-size:13px;">删除早于指定日期的历史记录。日期早于 1 个月的记录已自动从列表隐藏，但仍保存在数据库中，可用此功能清理。</p>
+        <div class="form-item">
+          <label>删除早于</label>
+          <input type="date" id="clearBeforeDate" value="${thirtyDaysAgo}" min="${thirtyDaysAgo}" max="${today}">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="modal.close()">取消</button>
+          <button class="btn btn-primary" onclick="summary.confirmClear()">确认删除</button>
+        </div>
+      </div>
+    `);
+  },
+
+  async confirmClear() {
+    const date = document.getElementById('clearBeforeDate').value;
+    if (!date) { toast.error('请选择日期'); return; }
+    if (!confirm(`确定删除 ${date} 之前的所有历史记录吗？此操作不可撤销。`)) return;
+    loading.show('清理中...');
+    try {
+      const { deleted } = await summaryHistoryAPI.clearBefore(date + 'T00:00:00Z');
+      toast.success(`已删除 ${deleted} 条记录`);
+      modal.close();
+      // 刷新当前 Tab 历史
+      const selId = { homework: 'homeworkStudent', daily: 'dailyStudent', weekly: 'weeklyStudent' }[this.currentTab];
+      const sel = document.getElementById(selId);
+      this.loadHistory(this.currentTab, sel && sel.value ? sel.value : null);
+    } catch (error) {
+      toast.error(error.message);
     } finally {
       loading.hide();
     }
   },
 
-  renderHomework(data) {
-    const contentEl = document.getElementById('summaryContent');
-    const subjectSummary = data.subject_summary || [];
-    let subjectsHtml = '';
-    if (subjectSummary.length > 0) {
-      subjectsHtml = `
-        <h3 style="margin-bottom:12px">📝 各科完成情况</h3>
-        <div class="subject-list">
-          ${subjectSummary.map(s => {
-            const percent = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
-            return `
-              <div class="subject-item">
-                <span class="subject-name">${s.name}</span>
-                <div class="subject-progress">
-                  <div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>
-                  <span class="progress-text">${s.completed}/${s.total}</span>
-                </div>
-              </div>`;
-          }).join('')}
-        </div>`;
-    }
-    contentEl.innerHTML = `
-      <div class="summary-stats">
-        <div class="stat-card"><div class="stat-value">${data.total_students || 0}</div><div class="stat-label">在册学生</div></div>
-        <div class="stat-card"><div class="stat-value">${data.completed_count || 0}</div><div class="stat-label">完成作业</div></div>
-        <div class="stat-card"><div class="stat-value">${data.avg_accuracy || 0}%</div><div class="stat-label">平均正确率</div></div>
-        <div class="stat-card"><div class="stat-value">${subjectSummary.length}</div><div class="stat-label">涉及科目</div></div>
-      </div>
-      ${subjectsHtml}
-      <div class="summary-suggestion"><h4>💡 建议</h4><p>${data.detail_text || '暂无建议'}</p></div>
-      <div class="summary-copy-preview"><h4>📋 复制文本预览</h4><pre style="white-space:pre-wrap;margin-top:8px">${data.copy_text || ''}</pre></div>
-    `;
-    contentEl.dataset.copyText = data.copy_text;
-  },
-
+  // === 板块一：作业情况（按学生单日统计） ===
   async generateHomework() {
+    const studentId = document.getElementById('homeworkStudent').value;
+    if (!studentId) { toast.error('请先选择学生'); return; }
+    const student = state.students.find(s => s.id === studentId);
+    if (!student) return;
+
     loading.show('生成中...');
     try {
-      const res = await summariesAPI.generate(state.currentDate);
-      this.renderHomework(res.summary);
+      const token = await authAPI.getAccessToken();
+      if (!token) { toast.error('登录已失效'); return; }
+
+      const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
+      const payload = {
+        mode: 'homework',
+        date: state.currentDate,
+        student_name: student.name,
+        grade: student.grade,
+        subjects: stats.subjects,
+        students: stats.students
+      };
+      const resp = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
+
+      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      document.getElementById('summaryContent').innerHTML = `
+        <div class="ai-summary-box">
+          <div class="ai-summary-meta">${student.name} · ${formatDate(state.currentDate)}</div>
+          <pre class="ai-summary-text">${safe}</pre>
+        </div>`;
+      document.getElementById('summaryContent').dataset.copyText = data.summary;
       document.getElementById('summaryActions').style.display = 'flex';
-      toast.success('总结生成成功');
+
+      // 写入历史
+      await summaryHistoryAPI.save({
+        kind: 'homework',
+        student_id: studentId,
+        period_start: state.currentDate,
+        period_end: state.currentDate,
+        content: data.summary,
+        payload
+      });
+      await this.loadHistory('homework', studentId);
+      toast.success('报告已生成');
     } catch (error) {
+      console.error('作业情况生成失败:', error);
       toast.error(error.message);
     } finally {
       loading.hide();
@@ -990,19 +1087,28 @@ const summary = {
     if (copyText) copyToClipboard(copyText);
   },
 
-  // === 板块二：日常总结（AI 按日生成，发家长群） ===
+  // === 板块二：日常总结（按学生 + 老师备注） ===
   async generateDaily() {
+    const studentId = document.getElementById('dailyStudent').value;
+    if (!studentId) { toast.error('请先选择学生'); return; }
+    const student = state.students.find(s => s.id === studentId);
+    if (!student) return;
+    const teacherNote = document.getElementById('dailyTeacherNote').value.trim();
+    if (!teacherNote) { toast.error('请填写老师反馈'); return; }
+
     loading.show('AI 生成日常总结...');
     try {
       const token = await authAPI.getAccessToken();
       if (!token) { toast.error('登录已失效'); return; }
 
-      const stats = await dailyStatsAPI.fetch(state.currentDate);
+      const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
       const payload = {
         mode: 'daily',
         date: state.currentDate,
+        student_name: student.name,
+        grade: student.grade,
         subjects: stats.subjects,
-        students: stats.students
+        teacher_note: teacherNote
       };
       const resp = await fetch('/api/summarize', {
         method: 'POST',
@@ -1016,11 +1122,24 @@ const summary = {
       const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       document.getElementById('dailyContent').innerHTML = `
         <div class="ai-summary-box">
+          <div class="ai-summary-meta">${student.name} · ${formatDate(state.currentDate)}</div>
           <pre class="ai-summary-text">${safe}</pre>
           <div class="modal-footer">
-            <button class="btn btn-primary" onclick="summary.copyDaily()">📋 复制发家长群</button>
+            <button class="btn btn-primary" onclick="summary.copyDaily()">📋 复制发家长</button>
           </div>
         </div>`;
+
+      await summaryHistoryAPI.save({
+        kind: 'daily',
+        student_id: studentId,
+        period_start: state.currentDate,
+        period_end: state.currentDate,
+        teacher_note: teacherNote,
+        content: data.summary,
+        payload
+      });
+      await this.loadHistory('daily', studentId);
+      toast.success('日常总结已生成');
     } catch (error) {
       console.error('日常总结失败:', error);
       toast.error(error.message);
@@ -1033,18 +1152,10 @@ const summary = {
     if (this.dailyAi) { copyToClipboard(this.dailyAi); toast.success('已复制'); }
   },
 
-  // === 板块三：周总结（按学生生成，发家长） ===
-  refreshWeeklyStudent() {
-    const sel = document.getElementById('weeklyStudent');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">请选择学生...</option>' +
-      state.students.map(s => `<option value="${s.id}">${s.name}${s.grade ? '（' + s.grade + '）' : ''}</option>`).join('');
-  },
-
+  // === 板块三：周总结（按学生） ===
   async generateWeekly() {
     const studentId = document.getElementById('weeklyStudent').value;
     if (!studentId) { toast.error('请先选择学生'); return; }
-
     const student = state.students.find(s => s.id === studentId);
     if (!student) return;
 
@@ -1093,6 +1204,17 @@ const summary = {
             <button class="btn btn-primary" onclick="summary.copyWeekly()">📋 复制发给家长</button>
           </div>
         </div>`;
+
+      await summaryHistoryAPI.save({
+        kind: 'weekly',
+        student_id: studentId,
+        period_start: weekStart,
+        period_end: weekEnd,
+        content: data.summary,
+        payload
+      });
+      await this.loadHistory('weekly', studentId);
+      toast.success('周总结已生成');
     } catch (error) {
       console.error('周总结失败:', error);
       toast.error(error.message);
@@ -1207,7 +1329,6 @@ const profile = {
       <div class="profile-section-head">
         <h3>各科水平对比</h3>
         <div class="profile-actions">
-          <button class="btn btn-outline btn-sm" onclick="profile.aiSummary()">✨ AI 周总结</button>
           <button class="btn btn-primary btn-sm" onclick="profile.showAddModal()">＋ 记录学情</button>
         </div>
       </div>
@@ -1349,21 +1470,7 @@ const profile = {
     }
   },
 
-  // AI 周总结：复用总结页里的周总结逻辑（保证两边文案完全一致）
-  async aiSummary() {
-    // 切到「总结」页的「周总结」板块，并预选当前学生
-    router.navigate('summary');
-    // 等待页面渲染
-    setTimeout(() => {
-      summary.switchTab('weekly');
-      const sel = document.getElementById('weeklyStudent');
-      if (sel) {
-        sel.value = state.currentStudentId;
-      }
-      summary.generateWeekly();
-    }, 50);
-  }
-};
+  };
 
 async function initProfilePage() {
   await profile.render();

@@ -98,6 +98,45 @@ window.studentsAPI = {
   }
 }
 
+// 总结历史记录
+window.summaryHistoryAPI = {
+  async list(kind, studentId) {
+    const cutoffDate = new Date()
+    cutoffDate.setMonth(cutoffDate.getMonth() - 1)
+    let q = supabaseClient
+      .from('summary_history')
+      .select('*')
+      .eq('kind', kind)
+      .gte('created_at', cutoffDate.toISOString())
+      .order('created_at', { ascending: false })
+    if (studentId) q = q.eq('student_id', studentId)
+    const result = await q
+    if (result.error) throw result.error
+    return { items: result.data }
+  },
+
+  async save(record) {
+    const userResult = await supabaseClient.auth.getUser()
+    const result = await supabaseClient
+      .from('summary_history')
+      .insert({ ...record, created_by: userResult.data?.user?.id })
+      .select()
+      .single()
+    if (result.error) throw result.error
+    return { item: result.data }
+  },
+
+  // 用户主动按时间范围清除
+  async clearBefore(dateISO) {
+    const result = await supabaseClient
+      .from('summary_history')
+      .delete()
+      .lt('created_at', dateISO)
+    if (result.error) throw result.error
+    return { deleted: (result.data || []).length }
+  }
+}
+
 // 学情评估相关 API
 window.assessmentsAPI = {
   // 拉取某学生的全部历次评估（含科目信息）
@@ -184,9 +223,9 @@ window.weekStatsAPI = {
   }
 }
 
-// 全班某日的作业统计，供 AI 日常总结使用
+// 全班或单生某日的作业统计，供 AI 日常总结使用
 window.dailyStatsAPI = {
-  async fetch(date) {
+  async fetch(date, studentId) {
     const [plansRes, reportsRes] = await Promise.all([
       supabaseClient
         .from('homework_plans')
@@ -197,28 +236,32 @@ window.dailyStatsAPI = {
         .select('accuracy, student:students(id, name), subject:subjects(id, name)')
         .eq('plan_date', date)
     ])
+    // 按 studentId 过滤
+    const filterBy = arr => studentId ? (arr || []).filter(r => r.student?.id === studentId) : (arr || [])
 
     if (plansRes.error) throw plansRes.error
     if (reportsRes.error) throw reportsRes.error
 
     // 按科目聚合
+    const plansAll = filterBy(plansRes.data)
+    const reportsAll = filterBy(reportsRes.data)
     const subjects = {}
-    ;(plansRes.data || []).forEach(p => {
+    plansAll.forEach(p => {
       const name = p.subject?.name || '未知'
       if (!subjects[name]) subjects[name] = { subject: name, total: 0, completed: 0 }
       subjects[name].total++
       if (p.is_completed) subjects[name].completed++
     })
 
-    // 按学生聚合
+    // 按学生聚合（若指定 studentId，这里也只有 1 项）
     const students = {}
-    ;(plansRes.data || []).forEach(p => {
+    plansAll.forEach(p => {
       const name = p.student?.name || '未知'
       if (!students[name]) students[name] = { student: name, total: 0, completed: 0, accuracies: [] }
       students[name].total++
       if (p.is_completed) students[name].completed++
     })
-    ;(reportsRes.data || []).forEach(r => {
+    reportsAll.forEach(r => {
       const name = r.student?.name || '未知'
       if (!students[name]) students[name] = { student: name, total: 0, completed: 0, accuracies: [] }
       if (typeof r.accuracy === 'number') students[name].accuracies.push(r.accuracy)

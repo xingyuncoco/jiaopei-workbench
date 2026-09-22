@@ -185,42 +185,66 @@
           <button class="summary-tab" onclick="summary.switchTab('weekly')">周总结</button>
         </div>
 
-        <!-- 板块一：作业情况总结（原有按日统计） -->
+        <!-- 板块一：作业情况（必选学生 + 生成） -->
         <div id="tabHomework" class="summary-tab-panel">
           <div class="summary-date">
             <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
             <span id="summaryDate"></span>
             <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
           </div>
-
-          <div id="summaryContent" class="summary-content">
-            <div class="summary-loading">加载中...</div>
+          <div class="weekly-picker">
+            <select id="homeworkStudent" onchange="summary.onStudentChange('homework')"></select>
+            <button class="btn btn-primary" id="homeworkGenerateBtn" onclick="summary.generateHomework()" disabled>✨ 生成报告</button>
           </div>
-
+          <div id="summaryContent" class="summary-content"></div>
           <div id="summaryActions" class="summary-actions" style="display:none">
-            <button class="btn btn-outline" onclick="summary.copySummary()">📋 复制总结</button>
+            <button class="btn btn-outline" onclick="summary.copySummary()">📋 复制</button>
             <button class="btn btn-primary" onclick="summary.regenerate()">🔄 重新生成</button>
+          </div>
+          <div class="history-section">
+            <div class="history-head"><h4>📚 历史记录</h4></div>
+            <div id="homeworkHistory"></div>
           </div>
         </div>
 
-        <!-- 板块二：日常总结（AI 按日生成，可发家长群） -->
+        <!-- 板块二：日常总结（必选学生 + 老师备注） -->
         <div id="tabDaily" class="summary-tab-panel" hidden>
           <div class="summary-date">
             <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
             <span id="dailyDate"></span>
             <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
           </div>
-          <button class="btn btn-primary" onclick="summary.generateDaily()">✨ 生成日常总结</button>
+          <div class="weekly-picker">
+            <select id="dailyStudent" onchange="summary.onStudentChange('daily')"></select>
+          </div>
+          <div class="form-item">
+            <label>老师反馈（今天做了什么 / 孩子实际情况 / 计划做什么）</label>
+            <textarea id="dailyTeacherNote" rows="4" placeholder="例：今天陪孩子复习了分数应用题，做了 8 道题，错了 3 道。明天计划做单位换算专项练习。"></textarea>
+          </div>
+          <button class="btn btn-primary" id="dailyGenerateBtn" onclick="summary.generateDaily()" disabled>✨ 生成报告</button>
           <div id="dailyContent"></div>
+          <div class="history-section">
+            <div class="history-head"><h4>📚 历史记录</h4></div>
+            <div id="dailyHistory"></div>
+          </div>
         </div>
 
-        <!-- 板块三：周总结（AI 按学生生成，发给家长） -->
+        <!-- 板块三：周总结（必选学生 + 生成） -->
         <div id="tabWeekly" class="summary-tab-panel" hidden>
           <div class="weekly-picker">
-            <select id="weeklyStudent"></select>
-            <button class="btn btn-primary" onclick="summary.generateWeekly()">✨ 生成周总结</button>
+            <select id="weeklyStudent" onchange="summary.onStudentChange('weekly')"></select>
+            <button class="btn btn-primary" id="weeklyGenerateBtn" onclick="summary.generateWeekly()" disabled>✨ 生成报告</button>
           </div>
           <div id="weeklyContent"></div>
+          <div class="history-section">
+            <div class="history-head"><h4>📚 历史记录</h4></div>
+            <div id="weeklyHistory"></div>
+          </div>
+        </div>
+
+        <!-- 历史记录清理面板（所有板块共用） -->
+        <div class="history-clean">
+          <button class="btn btn-outline btn-sm" onclick="summary.showClearDialog()">🗑 清理历史记录</button>
         </div>
       </section>
     </main>

@@ -3,7 +3,8 @@
  * 全局 API（从 window 读取）
  */
 
-const { supabase, studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI } = window;
+const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI } = window;
+const supabase = window.supabase;
 
 // 全局状态
 const state = {

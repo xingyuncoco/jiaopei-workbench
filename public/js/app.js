@@ -854,41 +854,77 @@ const correct = {
   }
 };
 
-// 每日总结页面
+// 总结页面：作业情况 / 日常 / 周总结 三个板块
 async function initSummaryPage() {
+  // 默认展示第一个板块，避免第一次进入时空白
+  if (!summary.currentTab) summary.currentTab = 'homework';
   document.getElementById('summaryDate').textContent = formatDate(state.currentDate);
-  await loadSummary();
+  const dailyDateEl = document.getElementById('dailyDate');
+  if (dailyDateEl) dailyDateEl.textContent = formatDate(state.currentDate);
+  // 学生下拉（周总结板块用）
+  const sel = document.getElementById('weeklyStudent');
+  if (sel) {
+    sel.innerHTML = '<option value="">请选择学生...</option>' +
+      state.students.map(s => `<option value="${s.id}">${s.name}${s.grade ? '（' + s.grade + '）' : ''}</option>`).join('');
+  }
+  await summary.loadHomework();
 }
 
 const summary = {
+  currentTab: 'homework',
+  dailyAi: '',
+  weeklyAi: '',
+
+  // 切换 Tab（被 index.html onclick 直接调用）
+  switchTab(name) {
+    this.currentTab = name;
+    document.querySelectorAll('.summary-tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.summary-tab-panel').forEach(el => { el.hidden = true; });
+    const labels = { homework: '作业情况', daily: '日常总结', weekly: '周总结' };
+    const panels = { homework: 'tabHomework', daily: 'tabDaily', weekly: 'tabWeekly' };
+    const tabBtn = Array.from(document.querySelectorAll('.summary-tab'))
+      .find(el => el.textContent.trim() === labels[name]);
+    if (tabBtn) tabBtn.classList.add('active');
+    document.getElementById(panels[name]).hidden = false;
+
+    if (name === 'homework') this.loadHomework();
+    if (name === 'daily') {
+      const el = document.getElementById('dailyDate');
+      if (el) el.textContent = formatDate(state.currentDate);
+    }
+    if (name === 'weekly') {
+      this.refreshWeeklyStudent();
+    }
+  },
+
+  // 日期切换：作业情况 + 日常总结同步
   changeDate(delta) {
     const date = new Date(state.currentDate);
     date.setDate(date.getDate() + delta);
     state.currentDate = date.toISOString().split('T')[0];
     document.getElementById('summaryDate').textContent = formatDate(state.currentDate);
-    loadSummary();
+    const dailyDateEl = document.getElementById('dailyDate');
+    if (dailyDateEl) dailyDateEl.textContent = formatDate(state.currentDate);
+    if (this.currentTab === 'homework') this.loadHomework();
   },
 
-  async loadSummary() {
+  // === 板块一：作业情况（本地生成，保留原逻辑） ===
+  async loadHomework() {
     const contentEl = document.getElementById('summaryContent');
     const actionsEl = document.getElementById('summaryActions');
-
     loading.show('加载中...');
-
     try {
       const res = await summariesAPI.get(state.currentDate);
-
       if (res.summary) {
-        this.renderSummary(res.summary);
+        this.renderHomework(res.summary);
         actionsEl.style.display = 'flex';
       } else {
         contentEl.innerHTML = `
           <div class="empty-state">
             <div class="empty-state-icon">📊</div>
             <p class="empty-state-text">暂无总结</p>
-            <button class="btn btn-primary" onclick="summary.generate()">生成今日总结</button>
-          </div>
-        `;
+            <button class="btn btn-primary" onclick="summary.generateHomework()">生成今日总结</button>
+          </div>`;
         actionsEl.style.display = 'none';
       }
     } catch (error) {
@@ -898,10 +934,9 @@ const summary = {
     }
   },
 
-  renderSummary(data) {
+  renderHomework(data) {
     const contentEl = document.getElementById('summaryContent');
     const subjectSummary = data.subject_summary || [];
-
     let subjectsHtml = '';
     if (subjectSummary.length > 0) {
       subjectsHtml = `
@@ -913,60 +948,32 @@ const summary = {
               <div class="subject-item">
                 <span class="subject-name">${s.name}</span>
                 <div class="subject-progress">
-                  <div class="progress-bar">
-                    <div class="progress-fill" style="width:${percent}%"></div>
-                  </div>
+                  <div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>
                   <span class="progress-text">${s.completed}/${s.total}</span>
                 </div>
-              </div>
-            `;
+              </div>`;
           }).join('')}
-        </div>
-      `;
+        </div>`;
     }
-
     contentEl.innerHTML = `
       <div class="summary-stats">
-        <div class="stat-card">
-          <div class="stat-value">${data.total_students || 0}</div>
-          <div class="stat-label">在册学生</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${data.completed_count || 0}</div>
-          <div class="stat-label">完成作业</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${data.avg_accuracy || 0}%</div>
-          <div class="stat-label">平均正确率</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${subjectSummary.length}</div>
-          <div class="stat-label">涉及科目</div>
-        </div>
+        <div class="stat-card"><div class="stat-value">${data.total_students || 0}</div><div class="stat-label">在册学生</div></div>
+        <div class="stat-card"><div class="stat-value">${data.completed_count || 0}</div><div class="stat-label">完成作业</div></div>
+        <div class="stat-card"><div class="stat-value">${data.avg_accuracy || 0}%</div><div class="stat-label">平均正确率</div></div>
+        <div class="stat-card"><div class="stat-value">${subjectSummary.length}</div><div class="stat-label">涉及科目</div></div>
       </div>
-
       ${subjectsHtml}
-
-      <div class="summary-suggestion">
-        <h4>💡 建议</h4>
-        <p>${data.detail_text || '暂无建议'}</p>
-      </div>
-
-      <div class="summary-copy-preview">
-        <h4>📋 复制文本预览</h4>
-        <pre style="white-space:pre-wrap;margin-top:8px">${data.copy_text || ''}</pre>
-      </div>
+      <div class="summary-suggestion"><h4>💡 建议</h4><p>${data.detail_text || '暂无建议'}</p></div>
+      <div class="summary-copy-preview"><h4>📋 复制文本预览</h4><pre style="white-space:pre-wrap;margin-top:8px">${data.copy_text || ''}</pre></div>
     `;
-
     contentEl.dataset.copyText = data.copy_text;
   },
 
-  async generate() {
+  async generateHomework() {
     loading.show('生成中...');
-
     try {
       const res = await summariesAPI.generate(state.currentDate);
-      this.renderSummary(res.summary);
+      this.renderHomework(res.summary);
       document.getElementById('summaryActions').style.display = 'flex';
       toast.success('总结生成成功');
     } catch (error) {
@@ -976,17 +983,139 @@ const summary = {
     }
   },
 
-  async regenerate() {
-    await this.generate();
-  },
+  regenerate() { return this.generateHomework(); },
 
   copySummary() {
     const copyText = document.getElementById('summaryContent').dataset.copyText;
-    if (copyText) {
-      copyToClipboard(copyText);
+    if (copyText) copyToClipboard(copyText);
+  },
+
+  // === 板块二：日常总结（AI 按日生成，发家长群） ===
+  async generateDaily() {
+    loading.show('AI 生成日常总结...');
+    try {
+      const token = await authAPI.getAccessToken();
+      if (!token) { toast.error('登录已失效'); return; }
+
+      const stats = await dailyStatsAPI.fetch(state.currentDate);
+      const payload = {
+        mode: 'daily',
+        date: state.currentDate,
+        subjects: stats.subjects,
+        students: stats.students
+      };
+      const resp = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
+
+      this.dailyAi = data.summary;
+      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      document.getElementById('dailyContent').innerHTML = `
+        <div class="ai-summary-box">
+          <pre class="ai-summary-text">${safe}</pre>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="summary.copyDaily()">📋 复制发家长群</button>
+          </div>
+        </div>`;
+    } catch (error) {
+      console.error('日常总结失败:', error);
+      toast.error(error.message);
+    } finally {
+      loading.hide();
     }
+  },
+
+  copyDaily() {
+    if (this.dailyAi) { copyToClipboard(this.dailyAi); toast.success('已复制'); }
+  },
+
+  // === 板块三：周总结（按学生生成，发家长） ===
+  refreshWeeklyStudent() {
+    const sel = document.getElementById('weeklyStudent');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">请选择学生...</option>' +
+      state.students.map(s => `<option value="${s.id}">${s.name}${s.grade ? '（' + s.grade + '）' : ''}</option>`).join('');
+  },
+
+  async generateWeekly() {
+    const studentId = document.getElementById('weeklyStudent').value;
+    if (!studentId) { toast.error('请先选择学生'); return; }
+
+    const student = state.students.find(s => s.id === studentId);
+    if (!student) return;
+
+    loading.show('AI 生成周总结...');
+    try {
+      const token = await authAPI.getAccessToken();
+      if (!token) { toast.error('登录已失效'); return; }
+
+      const [weekStart, weekEnd] = currentWeekRange();
+      const [weekStats, assessRes] = await Promise.all([
+        weekStatsAPI.fetch(studentId, weekStart, weekEnd),
+        assessmentsAPI.listByStudent(studentId)
+      ]);
+
+      const payload = {
+        mode: 'weekly',
+        student_name: student.name,
+        grade: student.grade,
+        enrolled_at: student.enrolled_at,
+        week_start: weekStart,
+        week_end: weekEnd,
+        week_stats: weekStats,
+        assessments: assessRes.assessments.map(a => ({
+          subject: a.subject?.name || '已删除科目',
+          type: ASSESS_TYPES[a.assess_type] || a.assess_type,
+          date: a.assess_date,
+          level: a.level,
+          weak_points: a.weak_points
+        }))
+      };
+      const resp = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
+
+      this.weeklyAi = data.summary;
+      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      document.getElementById('weeklyContent').innerHTML = `
+        <div class="ai-summary-box">
+          <div class="ai-summary-meta">${student.name} · ${weekStart} 至 ${weekEnd}</div>
+          <pre class="ai-summary-text">${safe}</pre>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="summary.copyWeekly()">📋 复制发给家长</button>
+          </div>
+        </div>`;
+    } catch (error) {
+      console.error('周总结失败:', error);
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
+  },
+
+  copyWeekly() {
+    if (this.weeklyAi) { copyToClipboard(this.weeklyAi); toast.success('已复制'); }
   }
 };
+
+// 本周一到本周日的日期区间（周总结用）
+function currentWeekRange() {
+  const now = new Date();
+  const offset = (now.getDay() + 6) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - offset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return [start.toISOString().split('T')[0], end.toISOString().split('T')[0]];
+}
 
 // ========== 学生学情档案 ==========
 const LEVEL_LABELS = ['', '入门', '较弱', '中等', '良好', '优秀'];
@@ -1220,91 +1349,21 @@ const profile = {
     }
   },
 
-  // 生成 AI 周总结：聚合本周作业 + 历次学情，交给服务端代理调用 MiniMax
+  // AI 周总结：复用总结页里的周总结逻辑（保证两边文案完全一致）
   async aiSummary() {
-    const student = state.students.find(s => s.id === state.currentStudentId);
-    if (!student) return;
-
-    loading.show('AI 生成中...');
-    try {
-      const token = await authAPI.getAccessToken();
-      if (!token) {
-        toast.error('登录已失效，请重新登录');
-        return;
+    // 切到「总结」页的「周总结」板块，并预选当前学生
+    router.navigate('summary');
+    // 等待页面渲染
+    setTimeout(() => {
+      summary.switchTab('weekly');
+      const sel = document.getElementById('weeklyStudent');
+      if (sel) {
+        sel.value = state.currentStudentId;
       }
-
-      const [weekStart, weekEnd] = currentWeekRange();
-      const [weekStats, assessRes] = await Promise.all([
-        weekStatsAPI.fetch(student.id, weekStart, weekEnd),
-        assessmentsAPI.listByStudent(student.id)
-      ]);
-
-      const payload = {
-        student_name: student.name,
-        grade: student.grade,
-        enrolled_at: student.enrolled_at,
-        week_start: weekStart,
-        week_end: weekEnd,
-        week_stats: weekStats,
-        assessments: assessRes.assessments.map(a => ({
-          subject: a.subject?.name || '已删除科目',
-          type: ASSESS_TYPES[a.assess_type] || a.assess_type,
-          date: a.assess_date,
-          level: a.level,
-          weak_points: a.weak_points
-        }))
-      };
-
-      const resp = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
-
-      lastAiSummary = data.summary;
-      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      modal.show('✨ AI 周总结', `
-        <div class="ai-summary-box">
-          <pre class="ai-summary-text">${safe}</pre>
-          <div class="modal-footer">
-            <button class="btn btn-outline" onclick="modal.close()">关闭</button>
-            <button class="btn btn-primary" onclick="profile.copyAiSummary()">复制发给家长</button>
-          </div>
-        </div>
-      `);
-    } catch (error) {
-      console.error('AI 周总结失败:', error);
-      toast.error(error.message);
-    } finally {
-      loading.hide();
-    }
-  },
-
-  copyAiSummary() {
-    if (lastAiSummary) {
-      copyToClipboard(lastAiSummary);
-      toast.success('已复制');
-    }
+      summary.generateWeekly();
+    }, 50);
   }
 };
-
-// 本周一到本周日的日期区间
-function currentWeekRange() {
-  const now = new Date();
-  const offset = (now.getDay() + 6) % 7;
-  const start = new Date(now);
-  start.setDate(now.getDate() - offset);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return [start.toISOString().split('T')[0], end.toISOString().split('T')[0]];
-}
-
-let lastAiSummary = '';
 
 async function initProfilePage() {
   await profile.render();

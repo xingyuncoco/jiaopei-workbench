@@ -20,7 +20,17 @@ export function onRequestGet(context) {
   return json({ configured: Boolean(context.env.MINIMAX_API_KEY) });
 }
 
-const SYSTEM_PROMPT = [
+const SYSTEM_PROMPT_DAILY = [
+  '你是一名教培机构的资深班主任，正在写今天给家长群的全班作业情况通报。',
+  '要求：',
+  '1. 语气积极正面，像在家长群发消息；',
+  '2. 开头一句总体情况概括（完成率、涉及科目数），不要堆数据；',
+  '3. 突出表扬完成率较高的学生（按学号或姓名列出 3-5 个），不要点名批评；',
+  '4. 指出 1-2 个需要家长配合的共性问题（如某科正确率偏低、某科完成度差），并给出具体家庭建议；',
+  '5. 200 字以内，自然分段，不使用 markdown 符号和表情。'
+].join('');
+
+const SYSTEM_PROMPT_WEEKLY = [
   '你是一名教培机构的资深老师，根据机构提供的数据给学生家长写本周学习反馈。',
   '要求：',
   '1. 语气亲切专业，像和家长面对面沟通；',
@@ -30,8 +40,31 @@ const SYSTEM_PROMPT = [
   '5. 300 字以内，自然分段，不使用 markdown 符号和表情。'
 ].join('');
 
-// 把前端聚合的学情数据拼成给模型的提示词
-function buildPrompt(p) {
+// 日常总结：按日数据
+function buildDailyPrompt(p) {
+  const lines = [];
+  lines.push(`日期：${p.date}`);
+  if (p.subjects && p.subjects.length) {
+    lines.push('各科今日作业情况：');
+    p.subjects.forEach(s => {
+      const pct = s.total ? Math.round((s.completed / s.total) * 100) : 0;
+      lines.push(`- ${s.subject}：布置${s.total}次，完成${s.completed}次（${pct}%）`);
+    });
+  } else {
+    lines.push('今日无作业数据。');
+  }
+  if (p.students && p.students.length) {
+    lines.push('逐生完成情况：');
+    p.students.forEach(s => {
+      const acc = s.avg_accuracy === null ? '未批改' : `正确率${s.avg_accuracy}%`;
+      lines.push(`- ${s.student}：完成${s.completed}/${s.total}，${acc}`);
+    });
+  }
+  return lines.join('\n');
+}
+
+// 周总结：按学生学情
+function buildWeeklyPrompt(p) {
   const lines = [];
   lines.push(`学生：${p.student_name}（${p.grade || '年级未填'}）`);
   if (p.enrolled_at) lines.push(`入学日期：${p.enrolled_at}`);
@@ -84,6 +117,11 @@ export async function onRequestPost(context) {
     return json({ error: '请求体不是合法 JSON' }, 400);
   }
 
+  // 根据 mode 选择对应的提示词
+  const mode = payload?.mode || 'weekly';
+  const system = mode === 'daily' ? SYSTEM_PROMPT_DAILY : SYSTEM_PROMPT_WEEKLY;
+  const userPrompt = mode === 'daily' ? buildDailyPrompt(payload) : buildWeeklyPrompt(payload);
+
   let resp;
   try {
     resp = await fetch(MINIMAX_ENDPOINT, {
@@ -97,8 +135,8 @@ export async function onRequestPost(context) {
         model: 'MiniMax-M3',
         max_tokens: 1024,
         temperature: 1,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: [{ type: 'text', text: buildPrompt(payload) }] }]
+        system,
+        messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }]
       })
     });
   } catch (e) {

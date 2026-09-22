@@ -184,6 +184,62 @@ window.weekStatsAPI = {
   }
 }
 
+// 全班某日的作业统计，供 AI 日常总结使用
+window.dailyStatsAPI = {
+  async fetch(date) {
+    const [plansRes, reportsRes] = await Promise.all([
+      supabaseClient
+        .from('homework_plans')
+        .select('id, is_completed, student:students(id, name), subject:subjects(id, name)')
+        .eq('plan_date', date),
+      supabaseClient
+        .from('homework_reports')
+        .select('accuracy, student:students(id, name), subject:subjects(id, name)')
+        .eq('plan_date', date)
+    ])
+
+    if (plansRes.error) throw plansRes.error
+    if (reportsRes.error) throw reportsRes.error
+
+    // 按科目聚合
+    const subjects = {}
+    ;(plansRes.data || []).forEach(p => {
+      const name = p.subject?.name || '未知'
+      if (!subjects[name]) subjects[name] = { subject: name, total: 0, completed: 0 }
+      subjects[name].total++
+      if (p.is_completed) subjects[name].completed++
+    })
+
+    // 按学生聚合
+    const students = {}
+    ;(plansRes.data || []).forEach(p => {
+      const name = p.student?.name || '未知'
+      if (!students[name]) students[name] = { student: name, total: 0, completed: 0, accuracies: [] }
+      students[name].total++
+      if (p.is_completed) students[name].completed++
+    })
+    ;(reportsRes.data || []).forEach(r => {
+      const name = r.student?.name || '未知'
+      if (!students[name]) students[name] = { student: name, total: 0, completed: 0, accuracies: [] }
+      if (typeof r.accuracy === 'number') students[name].accuracies.push(r.accuracy)
+    })
+
+    const toAcc = arr => arr.length
+      ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
+      : null
+
+    return {
+      subjects: Object.values(subjects),
+      students: Object.values(students).map(s => ({
+        student: s.student,
+        total: s.total,
+        completed: s.completed,
+        avg_accuracy: toAcc(s.accuracies)
+      }))
+    }
+  }
+}
+
 // 科目相关 API
 window.subjectsAPI = {
   async list() {

@@ -63,7 +63,7 @@
           </div>
           <div class="module-card" onclick="router.navigate('summary')">
             <div class="module-icon">📊</div>
-            <div class="module-name">每日总结</div>
+            <div class="module-name">总结</div>
           </div>
         </div>
 
@@ -172,26 +172,55 @@
         <div id="correctResult" class="correct-result" style="display:none"></div>
       </section>
 
-      <!-- 每日总结页面 -->
+      <!-- 总结页面：作业情况 / 日常 / 周总结 三个板块 -->
       <section id="summaryPage" class="page">
         <div class="page-header">
           <button class="back-btn" onclick="router.navigate('home')">← 返回</button>
-          <h2>📊 每日总结</h2>
+          <h2>📊 总结</h2>
         </div>
 
-        <div class="summary-date">
-          <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
-          <span id="summaryDate"></span>
-          <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
+        <div class="summary-tabs">
+          <button class="summary-tab active" onclick="summary.switchTab('homework')">作业情况</button>
+          <button class="summary-tab" onclick="summary.switchTab('daily')">日常总结</button>
+          <button class="summary-tab" onclick="summary.switchTab('weekly')">周总结</button>
         </div>
 
-        <div id="summaryContent" class="summary-content">
-          <div class="summary-loading">加载中...</div>
+        <!-- 板块一：作业情况总结（原有按日统计） -->
+        <div id="tabHomework" class="summary-tab-panel">
+          <div class="summary-date">
+            <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
+            <span id="summaryDate"></span>
+            <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
+          </div>
+
+          <div id="summaryContent" class="summary-content">
+            <div class="summary-loading">加载中...</div>
+          </div>
+
+          <div id="summaryActions" class="summary-actions" style="display:none">
+            <button class="btn btn-outline" onclick="summary.copySummary()">📋 复制总结</button>
+            <button class="btn btn-primary" onclick="summary.regenerate()">🔄 重新生成</button>
+          </div>
         </div>
 
-        <div id="summaryActions" class="summary-actions" style="display:none">
-          <button class="btn btn-outline" onclick="summary.copySummary()">📋 复制总结</button>
-          <button class="btn btn-primary" onclick="summary.regenerate()">🔄 重新生成</button>
+        <!-- 板块二：日常总结（AI 按日生成，可发家长群） -->
+        <div id="tabDaily" class="summary-tab-panel" hidden>
+          <div class="summary-date">
+            <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
+            <span id="dailyDate"></span>
+            <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
+          </div>
+          <button class="btn btn-primary" onclick="summary.generateDaily()">✨ 生成日常总结</button>
+          <div id="dailyContent"></div>
+        </div>
+
+        <!-- 板块三：周总结（AI 按学生生成，发给家长） -->
+        <div id="tabWeekly" class="summary-tab-panel" hidden>
+          <div class="weekly-picker">
+            <select id="weeklyStudent"></select>
+            <button class="btn btn-primary" onclick="summary.generateWeekly()">✨ 生成周总结</button>
+          </div>
+          <div id="weeklyContent"></div>
         </div>
       </section>
     </main>

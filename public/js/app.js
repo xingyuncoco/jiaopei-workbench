@@ -3,7 +3,7 @@
  * 全局 API（从 window 读取）
  */
 
-const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI, weekStatsAPI } = window;
+const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI, weekStatsAPI, dailyNotesAPI } = window;
 
 // 全局状态
 const state = {
@@ -480,6 +480,7 @@ async function initPlansPage() {
   // 默认选中第一个学生，避免"请先选择学生"提示造成误解
   const planSel = document.getElementById('planStudentSelect');
   if (planSel && !planSel.value && state.students.length > 0) planSel.value = state.students[0].id;
+  await dailyNotes.load(planSel?.value, state.currentDate);
   await loadPlans();
 }
 
@@ -501,6 +502,47 @@ function updateSubjectSelect(selectId) {
   select.innerHTML = html;
 }
 
+// ========== 学生每日共享备注（核心策略 / 今日预计规划） ==========
+const dailyNotes = {
+  // 加载并填充到顶部两个 textarea
+  async load(studentId, date) {
+    const wrap = document.getElementById('dailyNotesWrap');
+    if (!wrap) return;
+    if (!studentId) {
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = 'block';
+    document.getElementById('dailyNotesDate').textContent = date;
+
+    try {
+      const { note } = await dailyNotesAPI.get(studentId, date);
+      document.getElementById('dailyCoreStrategy').value = note?.core_strategy || '';
+      document.getElementById('dailyTodayPlan').value    = note?.today_plan || '';
+      document.getElementById('dailyNotesStatus').textContent = note ? '已保存' : '未填写';
+    } catch (error) {
+      console.error('加载每日备注失败:', error);
+    }
+  },
+
+  async save() {
+    const studentId = document.getElementById('planStudentSelect').value;
+    if (!studentId) { toast.error('请先选择学生'); return; }
+    const coreStrategy = document.getElementById('dailyCoreStrategy').value.trim() || null;
+    const todayPlan    = document.getElementById('dailyTodayPlan').value.trim() || null;
+    loading.show('保存中...');
+    try {
+      await dailyNotesAPI.upsert(studentId, state.currentDate, { core_strategy: coreStrategy, today_plan: todayPlan });
+      document.getElementById('dailyNotesStatus').textContent = '已保存';
+      toast.success('已保存今日备注');
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
+  }
+};
+
 async function loadPlans() {
   const studentId = document.getElementById('planStudentSelect').value;
   const listEl = document.getElementById('plansList');
@@ -513,6 +555,9 @@ async function loadPlans() {
   loading.show('加载中...');
 
   try {
+    // 切换学生 / 日期时同步加载每日备注
+    await dailyNotes.load(studentId, state.currentDate);
+
     const res = await plansAPI.list({
       date: state.currentDate,
       student_id: studentId
@@ -537,8 +582,8 @@ async function loadPlans() {
       const isBreak = plan.subject?.is_break;
       const duration = plan.duration_minutes || (plan.start_time && plan.end_time ? minutesBetween(plan.start_time, plan.end_time) : 0);
       const durationText = duration ? `${duration} 分钟` : '';
-      const strategyHtml = plan.core_strategy ? `<div class="plan-item-meta">🎯 ${plan.core_strategy}</div>` : '';
-      const todayPlanHtml = plan.today_plan ? `<div class="plan-item-meta">📝 ${plan.today_plan}</div>` : '';
+      const strategyHtml = '';
+      const todayPlanHtml = '';
 
       html += `
         <div class="plan-item ${isBreak ? 'plan-item-break' : ''}">
@@ -634,14 +679,6 @@ const plans = {
             <span id="planDuration" class="duration-display">—</span>
           </div>
         </div>
-        <div class="form-item">
-          <label>今日核心策略</label>
-          <textarea id="planCoreStrategy" rows="2" placeholder="例：先订正错题再做新题"></textarea>
-        </div>
-        <div class="form-item">
-          <label>今日预计规划</label>
-          <textarea id="planTodayPlan" rows="2" placeholder="例：错题订正 + 课本例题 + 课后 5 题"></textarea>
-        </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
           <button class="btn btn-primary" onclick="plans.save()">添加</button>
@@ -683,8 +720,6 @@ const plans = {
     const lessonType = document.getElementById('planLessonType').value;
     const startTime = document.getElementById('planStartTime').value;
     const endTime = document.getElementById('planEndTime').value;
-    const coreStrategy = document.getElementById('planCoreStrategy').value.trim() || null;
-    const todayPlan = document.getElementById('planTodayPlan').value.trim() || null;
 
     if (!subjectId) {
       toast.error('请选择科目');
@@ -713,9 +748,7 @@ const plans = {
         lesson_type: lessonType,
         start_time: startTime,
         end_time: endTime,
-        duration_minutes: durationMinutes,
-        core_strategy: coreStrategy,
-        today_plan: todayPlan
+        duration_minutes: durationMinutes
       });
 
       toast.success('添加成功');
@@ -767,6 +800,16 @@ const plans = {
 
     let text = `【${student.name} 今日作业规划】${formatFullDate(state.currentDate)}\n\n`;
 
+    // 顶部拼上今日共享备注（核心策略 / 今日预计规划）
+    try {
+      const { note } = await dailyNotesAPI.get(studentId, state.currentDate);
+      if (note) {
+        if (note.core_strategy) text += `🎯 今日核心策略：${note.core_strategy}\n`;
+        if (note.today_plan)    text += `📝 今日预计规划：${note.today_plan}\n`;
+        if (note.core_strategy || note.today_plan) text += '\n';
+      }
+    } catch (e) { /* 备注缺失不影响复制 */ }
+
     state.plans.forEach(plan => {
       const icon = plan.subject?.icon || '📝';
       const name = plan.subject?.name || '未知';
@@ -779,9 +822,6 @@ const plans = {
       text += `${icon} ${name} ${time} · ${lessonType} · 计划用时 ${duration}`;
       if (plan.is_completed) text += ` · 已完成 ✅`;
       text += `\n`;
-
-      if (plan.core_strategy) text += `   核心策略：${plan.core_strategy}\n`;
-      if (plan.today_plan) text += `   今日规划：${plan.today_plan}\n`;
     });
 
     copyToClipboard(text);

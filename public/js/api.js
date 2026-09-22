@@ -148,6 +148,35 @@ window.summaryHistoryAPI = {
   }
 }
 
+// 学生每日共享备注（核心策略 / 今日预计规划）
+window.dailyNotesAPI = {
+  async get(studentId, date) {
+    if (!studentId) return { note: null }
+    const result = await supabaseClient
+      .from('student_daily_notes')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('plan_date', date)
+      .maybeSingle()
+    if (result.error) throw result.error
+    return { note: result.data }
+  },
+
+  async upsert(studentId, date, payload) {
+    if (!studentId) throw new Error('studentId 不能为空')
+    const result = await supabaseClient
+      .from('student_daily_notes')
+      .upsert(
+        { student_id: studentId, plan_date: date, ...payload, updated_at: new Date().toISOString() },
+        { onConflict: 'student_id,plan_date' }
+      )
+      .select()
+      .single()
+    if (result.error) throw result.error
+    return { note: result.data }
+  }
+}
+
 // 学情评估相关 API
 window.assessmentsAPI = {
   // 拉取某学生的全部历次评估（含科目信息）

@@ -118,6 +118,23 @@
           </select>
         </div>
 
+        <!-- 每日共享备注：核心策略 / 今日预计规划 -->
+        <div id="dailyNotesWrap" class="daily-notes-wrap" style="display:none">
+          <div class="daily-notes-head">
+            <h4>📌 今日共享备注 <span class="daily-notes-date" id="dailyNotesDate"></span></h4>
+            <span id="dailyNotesStatus" class="daily-notes-status">未填写</span>
+          </div>
+          <div class="form-item">
+            <label>🎯 今日核心策略</label>
+            <textarea id="dailyCoreStrategy" rows="2" placeholder="例：先订正错题再做新题；今天重点关注单位换算"></textarea>
+          </div>
+          <div class="form-item">
+            <label>📝 今日预计规划</label>
+            <textarea id="dailyTodayPlan" rows="2" placeholder="例：错题订正 + 课本例题 5 道 + 课后练习"></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="dailyNotes.save()">💾 保存备注</button>
+        </div>
+
         <div id="plansList" class="plans-list"></div>
 
         <div class="plan-actions">

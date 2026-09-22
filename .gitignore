@@ -1,2 +1,7 @@
 .vercel
 debug.log
+
+# 本地密钥文件，禁止提交到仓库
+MY.env
+.env
+.env.local

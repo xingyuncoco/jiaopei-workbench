@@ -543,8 +543,7 @@ const plans = {
 
     let subjectOptions = '';
     state.subjects.forEach(subject => {
-      const tag = subject.is_break ? '⏸' : '';
-      subjectOptions += `<option value="${subject.id}" data-break="${subject.is_break ? '1' : '0'}">${subject.icon} ${subject.name} ${tag}</option>`;
+      subjectOptions += `<option value="${subject.id}">${subject.icon} ${subject.name}</option>`;
     });
 
     // 默认选项：作业（所有非休息科目都包含）+ 休息（休息科目自动只有 break）
@@ -599,20 +598,9 @@ const plans = {
 
   // 选了科目后，课型下拉只保留该科目允许的项
   _onSubjectChange() {
-    const subjectId = document.getElementById('planSubject').value;
-    const subject = state.subjects.find(s => s.id === subjectId);
-    if (!subject) return;
+    // 不再按科目过滤课型：所有课型始终全量展示，老师自由选择
     const sel = document.getElementById('planLessonType');
-    // 休息科目只允许"休息"；其它科目：未配置 default_lesson_types 时显示全部 6 类（仅缺"休息"）
-    let allowed;
-    if (subject.is_break) {
-      allowed = ['break'];
-    } else if (subject.default_lesson_types && subject.default_lesson_types.length > 0) {
-      allowed = subject.default_lesson_types;
-    } else {
-      allowed = window.LESSON_TYPES.map(lt => lt.value).filter(v => v !== 'break');
-    }
-    sel.innerHTML = window.LESSON_TYPES.filter(lt => allowed.includes(lt.value))
+    sel.innerHTML = window.LESSON_TYPES
       .map(lt => `<option value="${lt.value}">${lt.label}</option>`).join('');
     this._onTimeChange();
   },

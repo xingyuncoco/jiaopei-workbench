@@ -7,8 +7,8 @@
 const SUPABASE_URL = 'https://itcrmmkpblayymqvyzaf.supabase.co'
 const supabaseAnonKey = localStorage.getItem('supabase_anon_key') || ''
 
-// 通过全局变量 supabase 访问
-const supabase = window.supabase.createClient(SUPABASE_URL, supabaseAnonKey)
+// 通过全局变量 supabase 访问 CDN 加载的 SDK
+const supabaseClient = supabase.createClient(SUPABASE_URL, supabaseAnonKey)
 
 // 获取 token
 function getToken() {
@@ -18,7 +18,7 @@ function getToken() {
 // 设置认证 token
 window.setAuthToken = function (token) {
   localStorage.setItem('auth_token', token)
-  supabase.auth.setSession({
+  supabaseClient.auth.setSession({
     access_token: token,
     refresh_token: ''
   })
@@ -27,7 +27,7 @@ window.setAuthToken = function (token) {
 // 学生相关 API
 window.studentsAPI = {
   async list() {
-    const result = await supabase
+    const result = await supabaseClient
       .from('students')
       .select('*')
       .order('created_at', { ascending: false })
@@ -37,10 +37,10 @@ window.studentsAPI = {
   },
 
   async create(studentData) {
-    const userResult = await supabase.auth.getUser()
+    const userResult = await supabaseClient.auth.getUser()
     const userId = userResult.data?.user?.id
 
-    const result = await supabase
+    const result = await supabaseClient
       .from('students')
       .insert({ ...studentData, user_id: userId })
       .select()
@@ -51,7 +51,7 @@ window.studentsAPI = {
   },
 
   async update(id, studentData) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('students')
       .update(studentData)
       .eq('id', id)
@@ -63,7 +63,7 @@ window.studentsAPI = {
   },
 
   async delete(id) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('students')
       .delete()
       .eq('id', id)
@@ -76,7 +76,7 @@ window.studentsAPI = {
 // 科目相关 API
 window.subjectsAPI = {
   async list() {
-    const result = await supabase
+    const result = await supabaseClient
       .from('subjects')
       .select('*')
       .order('created_at', { ascending: true })
@@ -86,10 +86,10 @@ window.subjectsAPI = {
   },
 
   async create(subjectData) {
-    const userResult = await supabase.auth.getUser()
+    const userResult = await supabaseClient.auth.getUser()
     const userId = userResult.data?.user?.id
 
-    const result = await supabase
+    const result = await supabaseClient
       .from('subjects')
       .insert({ ...subjectData, user_id: userId })
       .select()
@@ -100,7 +100,7 @@ window.subjectsAPI = {
   },
 
   async update(id, subjectData) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('subjects')
       .update(subjectData)
       .eq('id', id)
@@ -112,7 +112,7 @@ window.subjectsAPI = {
   },
 
   async delete(id) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('subjects')
       .delete()
       .eq('id', id)
@@ -125,7 +125,7 @@ window.subjectsAPI = {
 // 规划相关 API
 window.plansAPI = {
   async list(params = {}) {
-    let query = supabase
+    let query = supabaseClient
       .from('homework_plans')
       .select(`
         *,
@@ -147,10 +147,10 @@ window.plansAPI = {
   },
 
   async create(planData) {
-    const userResult = await supabase.auth.getUser()
+    const userResult = await supabaseClient.auth.getUser()
     const userId = userResult.data?.user?.id
 
-    const result = await supabase
+    const result = await supabaseClient
       .from('homework_plans')
       .insert({ ...planData, user_id: userId })
       .select(`
@@ -165,7 +165,7 @@ window.plansAPI = {
   },
 
   async update(id, planData) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('homework_plans')
       .update(planData)
       .eq('id', id)
@@ -185,7 +185,7 @@ window.plansAPI = {
   },
 
   async delete(id) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('homework_plans')
       .delete()
       .eq('id', id)
@@ -198,7 +198,7 @@ window.plansAPI = {
 // 批改相关 API
 window.reportsAPI = {
   async list(params = {}) {
-    let query = supabase
+    let query = supabaseClient
       .from('homework_reports')
       .select(`
         *,
@@ -220,7 +220,7 @@ window.reportsAPI = {
   },
 
   async get(id) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('homework_reports')
       .select(`
         *,
@@ -235,7 +235,7 @@ window.reportsAPI = {
   },
 
   async delete(id) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('homework_reports')
       .delete()
       .eq('id', id)
@@ -248,7 +248,7 @@ window.reportsAPI = {
 // 总结相关 API
 window.summariesAPI = {
   async get(date) {
-    const result = await supabase
+    const result = await supabaseClient
       .from('daily_summaries')
       .select('*')
       .eq('summary_date', date)
@@ -259,18 +259,18 @@ window.summariesAPI = {
   },
 
   async generate(date) {
-    const countResult = await supabase
+    const countResult = await supabaseClient
       .from('students')
       .select('*', { count: 'exact', head: true })
 
     const totalStudents = countResult.count || 0
 
-    const plansResult = await supabase
+    const plansResult = await supabaseClient
       .from('homework_plans')
       .select(`*, subject:subjects(id, name)`)
       .eq('plan_date', date)
 
-    const reportsResult = await supabase
+    const reportsResult = await supabaseClient
       .from('homework_reports')
       .select(`*, subject:subjects(id, name)`)
       .eq('plan_date', date)
@@ -292,7 +292,7 @@ window.summariesAPI = {
       plans.filter(p => p.is_completed).map(p => p.student_id)
     ).size
 
-    const userResult = await supabase.auth.getUser()
+    const userResult = await supabaseClient.auth.getUser()
     const userId = userResult.data?.user?.id
 
     const avgAccuracy = reports.length > 0

@@ -11,18 +11,36 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 // 通过全局变量 supabase 访问 CDN 加载的 SDK
 const supabaseClient = supabase.createClient(SUPABASE_URL, supabaseAnonKey)
 
-// 获取 token
-function getToken() {
-  return localStorage.getItem('auth_token') || '';
-}
+/**
+ * 认证相关 API
+ * 说明：Supabase SDK 会自动把会话持久化到 localStorage，
+ * 刷新页面后无需手动恢复，直接 getSession 即可拿到登录用户。
+ */
+window.authAPI = {
+  // 邮箱 + 密码登录（账号由管理员在 Supabase 后台创建）
+  async signIn(email, password) {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    return { user: data.user }
+  },
 
-// 设置认证 token
-window.setAuthToken = function (token) {
-  localStorage.setItem('auth_token', token)
-  supabaseClient.auth.setSession({
-    access_token: token,
-    refresh_token: ''
-  })
+  async signOut() {
+    const { error } = await supabaseClient.auth.signOut()
+    if (error) throw error
+  },
+
+  async getCurrentUser() {
+    const { data, error } = await supabaseClient.auth.getSession()
+    if (error) throw error
+    return data.session?.user || null
+  },
+
+  // 会话变化（含被服务端判定失效）时回调，用于自动回到登录页
+  onAuthChange(callback) {
+    return supabaseClient.auth.onAuthStateChange((_event, session) => {
+      callback(session?.user || null)
+    })
+  }
 }
 
 // 学生相关 API

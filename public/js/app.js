@@ -97,14 +97,79 @@ function copyToClipboard(text) {
   });
 }
 
-// 页面初始化
+// 页面初始化：先判定登录态，未登录只显示登录页
 async function initApp() {
+  let user = null;
+  try {
+    user = await authAPI.getCurrentUser();
+  } catch (error) {
+    console.error('读取登录状态失败:', error);
+  }
+
+  // 会话被服务端判定失效（如后台改密码）时自动退回登录页
+  authAPI.onAuthChange(currentUser => {
+    if (!currentUser) showLogin();
+  });
+
+  user ? enterApp(user) : showLogin();
+}
+
+function showLogin() {
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+}
+
+// 登录成功：清空表单并加载业务数据
+async function enterApp(user) {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('loginPage').querySelector('form').reset();
+  document.getElementById('app').style.display = '';
+
+  document.getElementById('userName').textContent = (user.email || '').split('@')[0];
+
   const today = new Date();
   document.getElementById('todayDate').textContent =
     `${today.getMonth() + 1}月${today.getDate()}日 ${['日', '一', '二', '三', '四', '五', '六'][today.getDay()]}`;
 
   await loadAllData();
   initHomePage();
+}
+
+// 提交登录
+async function handleLogin(event) {
+  event.preventDefault();
+
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errorEl = document.getElementById('loginError');
+  const submitBtn = document.getElementById('loginSubmit');
+
+  errorEl.textContent = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = '登录中...';
+
+  try {
+    const { user } = await authAPI.signIn(email, password);
+    await enterApp(user);
+  } catch (error) {
+    console.error('登录失败:', error);
+    errorEl.textContent = error.message || '登录失败，请检查邮箱和密码';
+    submitBtn.disabled = false;
+    submitBtn.textContent = '登 录';
+  }
+}
+
+// 退出登录
+async function handleLogout() {
+  try {
+    await authAPI.signOut();
+  } catch (error) {
+    console.error('退出失败:', error);
+  }
+  state.students = [];
+  state.subjects = [];
+  state.plans = [];
+  showLogin();
 }
 
 async function loadAllData() {
@@ -896,7 +961,10 @@ const summary = {
 };
 
 // 应用启动
-document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('loginForm').addEventListener('submit', handleLogin);
+  initApp();
+});
 
 // 暴露给全局
 window.router = router;

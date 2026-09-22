@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#4F46E5">
+  <title>教培工作台</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部导航 -->
+    <header class="header">
+      <h1 class="header-title">教培工作台</h1>
+      <div class="header-user" id="userInfo">
+        <span class="user-avatar">👤</span>
+      </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+      <!-- 首页 -->
+      <section id="homePage" class="page active">
+        <div class="welcome-card">
+          <h2>你好，老师！</h2>
+          <p id="todayDate"></p>
+        </div>
+
+        <div class="module-grid">
+          <div class="module-card" onclick="router.navigate('students')">
+            <div class="module-icon">👨‍🎓</div>
+            <div class="module-name">学生管理</div>
+          </div>
+          <div class="module-card" onclick="router.navigate('plans')">
+            <div class="module-icon">📋</div>
+            <div class="module-name">作业规划</div>
+          </div>
+          <div class="module-card" onclick="router.navigate('correct')">
+            <div class="module-icon">📸</div>
+            <div class="module-name">拍照批改</div>
+          </div>
+          <div class="module-card" onclick="router.navigate('summary')">
+            <div class="module-icon">📊</div>
+            <div class="module-name">每日总结</div>
+          </div>
+        </div>
+
+        <div class="quick-tips">
+          <h3>📌 今日待办</h3>
+          <div id="quickList" class="quick-list">
+            <p class="empty-tip">暂无待办事项</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 学生管理页面 -->
+      <section id="studentsPage" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="router.navigate('home')">← 返回</button>
+          <h2>👨‍🎓 学生管理</h2>
+          <button class="add-btn" onclick="students.showAddModal()">＋ 添加</button>
+        </div>
+        <div id="studentsList" class="item-list"></div>
+      </section>
+
+      <!-- 作业规划页面 -->
+      <section id="plansPage" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="router.navigate('home')">← 返回</button>
+          <h2>📋 作业规划</h2>
+          <button class="add-btn" onclick="plans.showManageSubjects()">⚙️ 科目</button>
+        </div>
+
+        <div class="plan-date">
+          <button class="date-nav" onclick="plans.changeDate(-1)">◀</button>
+          <span id="planDate"></span>
+          <button class="date-nav" onclick="plans.changeDate(1)">▶</button>
+        </div>
+
+        <div class="plan-student-select">
+          <label>选择学生：</label>
+          <select id="planStudentSelect" onchange="plans.loadPlans()">
+            <option value="">请选择学生</option>
+          </select>
+        </div>
+
+        <div id="plansList" class="plans-list"></div>
+
+        <div class="plan-actions">
+          <button class="btn btn-outline" onclick="plans.copyPlans()">📋 复制规划</button>
+          <button class="btn btn-primary" onclick="plans.showAddPlan()">＋ 添加科目</button>
+        </div>
+      </section>
+
+      <!-- 科目管理页面 -->
+      <section id="subjectsPage" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="router.navigate('plans')">← 返回</button>
+          <h2>📚 科目管理</h2>
+          <button class="add-btn" onclick="subjects.showAddModal()">＋ 添加</button>
+        </div>
+        <div id="subjectsList" class="item-list"></div>
+      </section>
+
+      <!-- 拍照批改页面 -->
+      <section id="correctPage" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="router.navigate('home')">← 返回</button>
+          <h2>📸 拍照批改</h2>
+        </div>
+
+        <div class="correct-form">
+          <div class="form-group">
+            <label>选择学生：</label>
+            <select id="correctStudentSelect">
+              <option value="">请选择学生</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>选择科目：</label>
+            <select id="correctSubjectSelect">
+              <option value="">请选择科目</option>
+            </select>
+          </div>
+
+          <div class="upload-area" id="uploadArea" onclick="correct.triggerUpload()">
+            <input type="file" id="imageInput" accept="image/*" capture="environment" style="display:none" onchange="correct.handleImageSelect(event)">
+            <div class="upload-hint">
+              <div class="upload-icon">📷</div>
+              <p>点击拍照或上传作业图片</p>
+            </div>
+            <img id="previewImage" class="preview-image" style="display:none">
+          </div>
+
+          <button id="correctBtn" class="btn btn-primary btn-full" onclick="correct.startCorrect()" disabled>
+            🔍 开始批改
+          </button>
+        </div>
+
+        <div id="correctResult" class="correct-result" style="display:none"></div>
+      </section>
+
+      <!-- 每日总结页面 -->
+      <section id="summaryPage" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="router.navigate('home')">← 返回</button>
+          <h2>📊 每日总结</h2>
+        </div>
+
+        <div class="summary-date">
+          <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
+          <span id="summaryDate"></span>
+          <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
+        </div>
+
+        <div id="summaryContent" class="summary-content">
+          <div class="summary-loading">加载中...</div>
+        </div>
+
+        <div id="summaryActions" class="summary-actions" style="display:none">
+          <button class="btn btn-outline" onclick="summary.copySummary()">📋 复制总结</button>
+          <button class="btn btn-primary" onclick="summary.regenerate()">🔄 重新生成</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部导航 -->
+    <nav class="bottom-nav">
+      <div class="nav-item active" onclick="router.navigate('home')">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">首页</span>
+      </div>
+      <div class="nav-item" onclick="router.navigate('students')">
+        <span class="nav-icon">👨‍🎓</span>
+        <span class="nav-label">学生</span>
+      </div>
+      <div class="nav-item" onclick="router.navigate('plans')">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">规划</span>
+      </div>
+      <div class="nav-item" onclick="router.navigate('summary')">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">总结</span>
+      </div>
+    </nav>
+  </div>
+
+  <!-- 模态框容器 -->
+  <div id="modalContainer" class="modal-container" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">标题</h3>
+        <button class="modal-close" onclick="modal.close()">×</button>
+      </div>
+      <div id="modalContent" class="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div id="toast" class="toast"></div>
+
+  <!-- 加载状态 -->
+  <div id="loading" class="loading-overlay" style="display:none">
+    <div class="loading-spinner"></div>
+    <p id="loadingText">处理中...</p>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -782,16 +782,6 @@ const subjects = {
     ).join('');
   },
 
-  // 渲染课型多选
-  _renderLessonTypes(selected) {
-    return window.LESSON_TYPES.map(lt =>
-      `<label class="checkbox-item">
-        <input type="checkbox" value="${lt.value}" ${(selected || []).includes(lt.value) ? 'checked' : ''}>
-        <span>${lt.label}</span>
-      </label>`
-    ).join('');
-  },
-
   showAddModal() {
     modal.show('添加科目', `
       <div class="modal-form">
@@ -805,13 +795,9 @@ const subjects = {
         </div>
         <div class="form-item">
           <label>
-              <input type="checkbox" id="subjectIsBreak" onchange="subjects._onBreakToggle()">
-              标记为休息科目
-            </label>
-        </div>
-        <div class="form-item" id="lessonTypesWrap">
-          <label>支持的课型（勾选后可在规划里使用）</label>
-          <div class="checkbox-grid">${this._renderLessonTypes(['homework'])}</div>
+            <input type="checkbox" id="subjectIsBreak">
+            标记为休息科目
+          </label>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
@@ -820,7 +806,6 @@ const subjects = {
       </div>
     `);
     this._bindIconPicker();
-    this._onBreakToggle();
   },
 
   showEditModal(id) {
@@ -839,13 +824,9 @@ const subjects = {
         </div>
         <div class="form-item">
           <label>
-            <input type="checkbox" id="subjectIsBreak" ${subject.is_break ? 'checked' : ''} onchange="subjects._onBreakToggle()">
+            <input type="checkbox" id="subjectIsBreak" ${subject.is_break ? 'checked' : ''}>
             标记为休息科目
           </label>
-        </div>
-        <div class="form-item" id="lessonTypesWrap">
-          <label>支持的课型</label>
-          <div class="checkbox-grid">${this._renderLessonTypes(subject.default_lesson_types || [])}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
@@ -854,7 +835,6 @@ const subjects = {
       </div>
     `);
     this._bindIconPicker();
-    this._onBreakToggle();
   },
 
   _bindIconPicker() {
@@ -866,25 +846,11 @@ const subjects = {
     });
   },
 
-  // 勾选休息时，课型多选自动禁用 + 自动勾"休息"
-  _onBreakToggle() {
-    const isBreak = document.getElementById('subjectIsBreak').checked;
-    const wrap = document.getElementById('lessonTypesWrap');
-    if (!wrap) return;
-    wrap.style.opacity = isBreak ? '0.4' : '1';
-    wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.disabled = isBreak;
-      if (isBreak) cb.checked = cb.value === 'break';
-      else if (cb.value === 'break') cb.checked = false;
-    });
-  },
-
   async save(id) {
     const name = document.getElementById('subjectName').value.trim();
     const activeIcon = document.querySelector('.icon-option.active');
     const icon = activeIcon ? activeIcon.dataset.icon : '📝';
     const isBreak = document.getElementById('subjectIsBreak').checked;
-    const lessonTypes = Array.from(document.querySelectorAll('#lessonTypesWrap input:checked')).map(cb => cb.value);
 
     if (!name) {
       toast.error('请输入科目名称');
@@ -895,10 +861,10 @@ const subjects = {
 
     try {
       if (id) {
-        await subjectsAPI.update(id, { name, icon, is_break: isBreak, default_lesson_types: lessonTypes });
+        await subjectsAPI.update(id, { name, icon, is_break: isBreak });
         toast.success('修改成功');
       } else {
-        await subjectsAPI.create({ name, icon, is_break: isBreak, default_lesson_types: lessonTypes });
+        await subjectsAPI.create({ name, icon, is_break: isBreak });
         toast.success('添加成功');
       }
 

@@ -22,52 +22,78 @@ function parseBase64(input) {
 
 const SYSTEM_PROMPT = [
   '你是一位资深的中小学辅导老师，专长是给学生批改作业。',
-  '老师会上传一张学生作业照片（可能是数学、英语、物理、化学、语文等任意学科）。', '你的任务是分析照片内容，给出结构化的批改结果。',
+  '老师会上传一张学生作业照片（可能是数学、英语、物理、化学、语文等任意学科）。',
+  '你的任务是分析照片内容，给出结构化的批改结果。',
   '',
-  '严格按 JSON 输出，不要加 markdown、不要加任何说明文字。字段：',
+  '【输出格式硬性要求】',
+  '- 只输出一个 JSON 对象，**不要任何前后说明、不要 markdown 围栏、不要 ```**。',
+  '- 第一个字符必须是 {，最后一个字符必须是 }。',
+  '- 字符串里禁止出现未转义的换行或引号。',
+  '',
+  '字段：',
   '{',
   '  "questions": [',
-  '    {',
-  '      "index": 1,  // 题目序号，从 1 开始',
-  '      "status": "correct" | "wrong" | "blank",  // 状态：做对 / 做错 / 未做',
-  '      "student_answer": "学生的答案（空则写空字符串）",',
-  '      "correct_answer": "标准答案（仅在 wrong 或 blank 时填写）",',
-  '      "process": "学生的解题过程或步骤概述（仅在可识别时）",',
-  '      "wrong_reason": "错因分析（仅 wrong 时填写：知识漏洞 / 粗心 / 步骤漏写 等）"',
-  '    }',
+  '    { "index": 1, "status": "correct|wrong|blank", "student_answer": "...", "correct_answer": "...", "process": "...", "wrong_reason": "..." }',
   '  ],',
-  '  "total": 总题数,',
-  '  "correct": 做对的数量,',
-  '  "wrong": 做错的数量,',
-  '  "blank": 未做的数量,',
-  '  "weak_points": ["薄弱知识点 1", "薄弱知识点 2"],',
-  '  "advice": "给老师的简短教学建议（一句话）"',
+  '  "total": 0, "correct": 0, "wrong": 0, "blank": 0,',
+  '  "weak_points": ["..."],',
+  '  "advice": "一句话建议"',
   '}',
   '',
-  '要求：',
-  '1. 仔细看清每道题；2. 模糊不清就合理推断，不要瞎猜；',
-  '3. 如果完全看不清题目，questions 输出空数组，total/correct/wrong/blank 都设为 0；',
-  '4. weak_points 是科目维度的失分点归纳，最多 3 条；',
-  '5. advice 简短具体，给老师讲题用，**不写给家长看的总结**。'
+  '业务要求：',
+  '1. 仔细看清每道题；模糊不清就合理推断，不要瞎猜。',
+  '2. 完全看不清题目时，questions 输出空数组，total/correct/wrong/blank 都设为 0。',
+  '3. weak_points 是科目维度的失分点归纳，最多 3 条。',
+  '4. advice 简短具体，给老师讲题用，不写给家长看的总结。'
 ].join('\n');
 
 const USER_PROMPT_TEMPLATE = (subject, pageNumber) =>
   `请批改这张作业照片（第 ${pageNumber} 页）。科目：${subject || '未指定'}。请严格按系统提示的 JSON 结构输出，不要加任何额外说明。`;
 
 function safeParseJson(text) {
-  // 模型偶尔会包 markdown ```json ... ```，先尝试直接 parse，失败则尝试剥离
-  const trimmed = (text || '').trim();
-  try { return JSON.parse(trimmed); } catch (_) {}
-  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(trimmed);
-  if (fence) {
-    try { return JSON.parse(fence[1].trim()); } catch (_) {}
+  const raw = (text || '').trim();
+  if (!raw) return null;
+
+  const tryParse = (s) => { try { return JSON.parse(s); } catch (_) { return null; } };
+
+  // 1) 原样
+  let r = tryParse(raw); if (r) return r;
+
+  // 2) 去掉 markdown ```json ... ``` 围栏
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw);
+  if (fence) { r = tryParse(fence[1].trim()); if (r) return r; }
+
+  // 3) 找最外层 { ... }（按配对深度提取，处理嵌套）
+  const first = raw.indexOf('{');
+  if (first < 0) return null;
+  let depth = 0;
+  let last = -1;
+  let inStr = false;
+  let escape = false;
+  for (let i = first; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inStr) {
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { last = i; break; } }
   }
-  // 兜底：找首个 { 和末个 } 之间的内容
-  const first = trimmed.indexOf('{');
-  const last = trimmed.lastIndexOf('}');
-  if (first >= 0 && last > first) {
-    try { return JSON.parse(trimmed.slice(first, last + 1)); } catch (_) {}
+  if (last > first) {
+    const block = raw.slice(first, last + 1);
+    r = tryParse(block); if (r) return r;
+
+    // 4) 常见修复：去掉尾逗号、去掉 // 单行注释
+    const fixed = block
+      .replace(/,\s*([\]}])/g, '$1')        // ,] / ,}
+      .replace(/^\s*\/\/.*$/gm, '')          // 行注释
+      .replace(/\/\*[\s\S]*?\*\//g, '');     // 块注释
+    r = tryParse(fixed); if (r) return r;
   }
+
   return null;
 }
 

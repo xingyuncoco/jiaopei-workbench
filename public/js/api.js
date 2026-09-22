@@ -4,8 +4,8 @@
  */
 
 // Supabase 配置
-const SUPABASE_URL = 'https://itcrmmkpblayymqvyzaf.supabase.co'
-const supabaseAnonKey = localStorage.getItem('supabase_anon_key') || ''
+const SUPABASE_URL = 'https://fdcbsdsptvwcvzbhqgpt.supabase.co'
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkY2JzZHNwdHZ3Y3Z6YmhxZ3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2NjQ5MjMsImV4cCI6MjA2OTI0MDkyM30.M2btEjmIhO_aTCaW2iB9cD-xI5bT4NqJ4mZdB2xZEqA'
 
 // 通过全局变量 supabase 访问 CDN 加载的 SDK
 const supabaseClient = supabase.createClient(SUPABASE_URL, supabaseAnonKey)

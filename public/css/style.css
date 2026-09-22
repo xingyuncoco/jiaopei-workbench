@@ -1844,3 +1844,45 @@ html, body {
   font-size: 13px;
   color: var(--gray-500);
 }
+
+.homework-table-wrap {
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+}
+.homework-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.homework-table th, .homework-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--gray-100);
+  text-align: left;
+  vertical-align: top;
+}
+.homework-table th {
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+.homework-table td.grade-correct { color: #16a34a; }
+.homework-table td.grade-wrong   { color: #dc2626; }
+.homework-table td.grade-blank   { color: #6b7280; }
+.homework-table .badge {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+.hint {
+  color: var(--gray-500);
+  font-size: 13px;
+  padding: 16px 0;
+  text-align: center;
+}

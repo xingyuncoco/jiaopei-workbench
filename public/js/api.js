@@ -109,38 +109,6 @@ window.studentsAPI = {
   }
 }
 
-// 批改照片（一张照片一行）
-window.reportPhotosAPI = {
-  async listByReport(reportId) {
-    const result = await supabaseClient
-      .from('homework_report_photos')
-      .select('*')
-      .eq('report_id', reportId)
-      .order('page_number', { ascending: true })
-    if (result.error) throw result.error
-    return { photos: result.data }
-  },
-
-  async save(photo) {
-    const result = await supabaseClient
-      .from('homework_report_photos')
-      .insert(photo)
-      .select()
-      .single()
-    if (result.error) throw result.error
-    return { photo: result.data }
-  },
-
-  async delete(photoId) {
-    const result = await supabaseClient
-      .from('homework_report_photos')
-      .delete()
-      .eq('id', photoId)
-    if (result.error) throw result.error
-    return { success: true }
-  }
-}
-
 // 总结历史记录
 window.summaryHistoryAPI = {
   async list(kind, studentId) {
@@ -158,6 +126,16 @@ window.summaryHistoryAPI = {
     return { items: result.data }
   },
 
+  async get(id) {
+    const result = await supabaseClient
+      .from('summary_history')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (result.error) throw result.error
+    return { item: result.data }
+  },
+
   async save(record) {
     const userResult = await supabaseClient.auth.getUser()
     const result = await supabaseClient
@@ -167,6 +145,15 @@ window.summaryHistoryAPI = {
       .single()
     if (result.error) throw result.error
     return { item: result.data }
+  },
+
+  async deleteById(id) {
+    const result = await supabaseClient
+      .from('summary_history')
+      .delete()
+      .eq('id', id)
+    if (result.error) throw result.error
+    return { success: true }
   },
 
   // 用户主动按时间范围清除

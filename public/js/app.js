@@ -3,7 +3,7 @@
  * 全局 API（从 window 读取）
  */
 
-const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI, weekStatsAPI, dailyNotesAPI } = window;
+const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI, weekStatsAPI, dailyNotesAPI, summaryHistoryAPI } = window;
 
 // 全局状态
 const state = {
@@ -1215,7 +1215,7 @@ const correct = {
     `;
   },
 
-  // 保存为一条 homework_reports + 多条 homework_report_photos
+  // 保存为多条 homework_reports（每张照片一条，共享同一 batch_id）
   async saveAll() {
     const studentId = document.getElementById('correctStudentSelect').value;
     const subjectId = document.getElementById('correctSubjectSelect').value;
@@ -1227,18 +1227,6 @@ const correct = {
       const userResult = await supabaseClient.auth.getUser();
       const userId = userResult.data?.user?.id;
 
-      // 聚合数据
-      let totalQ = 0, correct = 0, wrong = 0, blank = 0;
-      const weakSet = new Set();
-      this.results.forEach(r => {
-        totalQ += r.total || 0;
-        correct += r.correct || 0;
-        wrong  += r.wrong  || 0;
-        blank  += r.blank  || 0;
-        (r.weak_points || []).forEach(w => weakSet.add(w));
-      });
-      const accuracy = totalQ > 0 ? Math.round(correct / totalQ * 100) : 0;
-
       // 找当天的 homework_plans 中匹配学生+科目+日期的那一条，作为关联
       let planId = null;
       const plan = state.plans.find(p =>
@@ -1248,35 +1236,33 @@ const correct = {
       );
       if (plan) planId = plan.id;
 
-      // 写 homework_reports
-      const { report } = await reportsAPI.create({
-        student_id: studentId,
-        subject_id: subjectId,
-        plan_date: state.currentDate,
-        plan_id: planId,
-        accuracy,
-        total_questions: totalQ,
-        correct_count: correct,
-        wrong_count: wrong,
-        blank_count: blank,
-        weak_points: [...weakSet].join('；') || null,
-        photo_count: this.photos.length,
-        user_id: userId
-      });
+      // 同一批次多张照片共享一个 batch_id
+      const batchId = crypto.randomUUID();
 
-      // 逐张写入照片表
+      // 每张照片单独存一条 homework_reports（保留每页的原始结果）
       for (let i = 0; i < this.photos.length; i++) {
         const photo = this.photos[i];
         const r = this.results[i] || {};
-        await reportPhotosAPI.save({
-          report_id: report.id,
-          page_number: photo.pageNumber,
-          image_data: photo.dataUrl,
-          ai_result: r,
-          question_count: r.total || 0,
-          correct_count: r.correct || 0,
-          wrong_count: r.wrong || 0,
-          blank_count: r.blank || 0
+        const total = r.total || 0;
+        const correct = r.correct || 0;
+        const wrong = r.wrong || 0;
+        const blank = r.blank || 0;
+        const accuracy = total > 0 ? Math.round(correct / total * 100) : 0;
+
+        await reportsAPI.create({
+          student_id: studentId,
+          subject_id: subjectId,
+          plan_date: state.currentDate,
+          plan_id: planId,
+          accuracy,
+          total_questions: total,
+          correct_count: correct,
+          wrong_count: wrong,
+          blank_count: blank,
+          weak_points: (r.weak_points || []).join('；') || null,
+          overall_advice: r.advice || null,
+          batch_id: batchId,
+          user_id: userId
         });
       }
 
@@ -1285,8 +1271,11 @@ const correct = {
         try { await plansAPI.toggleComplete(planId, true); } catch (_) {}
       }
 
-      toast.success(`已保存 ${this.photos.length} 张照片`);
+      toast.success(`已保存 ${this.photos.length} 张批改`);
       document.getElementById('correctSaveBtn').style.display = 'none';
+      // 刷新今日待办等依赖数据
+      if (typeof state.loadPlans === 'function') await state.loadPlans();
+      if (typeof updateQuickList === 'function') updateQuickList();
     } catch (error) {
       console.error('保存失败:', error);
       toast.error(error.message);
@@ -1360,6 +1349,7 @@ const summary = {
     date.setDate(date.getDate() + delta);
     state.currentDate = date.toISOString().split('T')[0];
     this.refreshDateLabels();
+    if (this.currentTab === 'homework') this.loadHomeworkDetail();
   },
 
   // === 历史记录 ===
@@ -1465,7 +1455,7 @@ const summary = {
     }
   },
 
-  // === 板块一：作业情况（按学生单日统计） ===
+  // === 板块一：作业情况（按学生 + 当天批改明细） ===
   async generateHomework() {
     const studentId = document.getElementById('homeworkStudent').value;
     if (!studentId) { toast.error('请先选择学生'); return; }
@@ -1478,15 +1468,18 @@ const summary = {
       if (!token) { toast.error('登录已失效'); return; }
 
       const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
+      const subjectMap = Object.fromEntries(state.subjects.map(s => [s.id, s]));
+      const { reports } = await reportsAPI.list({ date: state.currentDate, student_id: studentId });
+      const mergedSubjects = this._mergeReportsBySubject(reports || [], subjectMap);
+
       const payload = {
         mode: 'homework',
         date: state.currentDate,
         student_name: student.name,
         grade: student.grade,
-        subjects: stats.subjects,
-        students: stats.students
+        subjects: mergedSubjects
       };
-      const resp = await fetch('/api/summarize', {
+      const resp = await fetch('/api/homework-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
@@ -1527,6 +1520,105 @@ const summary = {
   copySummary() {
     const copyText = document.getElementById('summaryContent').dataset.copyText;
     if (copyText) copyToClipboard(copyText);
+  },
+
+  // 加载当天该学生所有批改记录并按科目合并展示
+  async loadHomeworkDetail() {
+    const studentId = document.getElementById('homeworkStudent').value;
+    const btn = document.getElementById('homeworkGenerateBtn');
+    const detailEl = document.getElementById('homeworkDetail');
+    btn.disabled = !studentId;
+
+    // 切学生时清掉上一份报告
+    document.getElementById('summaryContent').innerHTML = '';
+    document.getElementById('summaryActions').style.display = 'none';
+
+    if (!studentId) {
+      detailEl.innerHTML = '<p class="hint">请选择学生查看当天作业情况</p>';
+      this.loadHistory('homework', null);
+      return;
+    }
+
+    loading.show('加载作业情况...');
+    try {
+      const { reports } = await reportsAPI.list({ date: state.currentDate, student_id: studentId });
+      const student = state.students.find(s => s.id === studentId);
+      const subjectMap = Object.fromEntries(state.subjects.map(s => [s.id, s]));
+
+      if (!reports || reports.length === 0) {
+        detailEl.innerHTML = `<p class="hint">${student?.name || ''} 在 ${formatDate(state.currentDate)} 还没有批改记录</p>`;
+      } else {
+        const merged = this._mergeReportsBySubject(reports, subjectMap);
+        detailEl.innerHTML = this._renderHomeworkTable(student, merged);
+      }
+
+      this.loadHistory('homework', studentId);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
+  },
+
+  // 同一学生同一科目多次批改 → 合并平均
+  _mergeReportsBySubject(reports, subjectMap) {
+    const map = {};
+    reports.forEach(r => {
+      const subjName = r.subject?.name || subjectMap[r.subject_id]?.name || '未知道目';
+      if (!map[subjName]) {
+        map[subjName] = {
+          subject: subjName,
+          icon: r.subject?.icon || subjectMap[r.subject_id]?.icon || '',
+          total: 0, correct: 0, wrong: 0, blank: 0,
+          weakSet: new Set(), advices: [], count: 0
+        };
+      }
+      const m = map[subjName];
+      m.total   += r.total_questions || 0;
+      m.correct += r.correct_count   || 0;
+      m.wrong   += r.wrong_count     || 0;
+      m.blank   += r.blank_count     || 0;
+      m.count   += 1;
+      (r.weak_points || '').split(/[；;]/).map(s => s.trim()).filter(Boolean).forEach(w => m.weakSet.add(w));
+      if (r.overall_advice) m.advices.push(r.overall_advice);
+    });
+    return Object.values(map).map(m => ({
+      subject: m.subject,
+      icon: m.icon,
+      total: m.total,
+      correct: m.correct,
+      wrong: m.wrong,
+      blank: m.blank,
+      accuracy: m.total > 0 ? Math.round(m.correct / m.total * 100) : 0,
+      weak_points: [...m.weakSet],
+      advice: m.advices.join('；'),
+      count: m.count
+    }));
+  },
+
+  _renderHomeworkTable(student, items) {
+    const rows = items.map(it => `
+      <tr>
+        <td>${it.icon ? it.icon + ' ' : ''}${it.subject}${it.count > 1 ? ` <span class="badge">×${it.count}</span>` : ''}</td>
+        <td>${it.total}</td>
+        <td class="grade-correct">${it.correct}</td>
+        <td class="grade-wrong">${it.wrong}</td>
+        <td class="grade-blank">${it.blank}</td>
+        <td><b>${it.accuracy}%</b></td>
+        <td>${it.weak_points.length ? it.weak_points.join('；') : '—'}</td>
+        <td>${it.advice || '—'}</td>
+      </tr>`).join('');
+    return `
+      <div class="homework-table-wrap">
+        <table class="homework-table">
+          <thead>
+            <tr>
+              <th>科目</th><th>总题</th><th>对</th><th>错</th><th>空</th><th>准确率</th><th>薄弱点</th><th>老师建议</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   },
 
   // === 板块二：日常总结（按学生 + 老师备注） ===

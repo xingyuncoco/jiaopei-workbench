@@ -208,7 +208,7 @@
           <button class="summary-tab" onclick="summary.switchTab('weekly')">周总结</button>
         </div>
 
-        <!-- 板块一：作业情况（必选学生 + 生成） -->
+        <!-- 板块一：作业情况（选学生 + 当天批改明细 + 生成 AI 报告） -->
         <div id="tabHomework" class="summary-tab-panel">
           <div class="summary-date">
             <button class="date-nav" onclick="summary.changeDate(-1)">◀</button>
@@ -216,14 +216,24 @@
             <button class="date-nav" onclick="summary.changeDate(1)">▶</button>
           </div>
           <div class="weekly-picker">
-            <select id="homeworkStudent" onchange="summary.onStudentChange('homework')"></select>
-            <button class="btn btn-primary" id="homeworkGenerateBtn" onclick="summary.generateHomework()" disabled>✨ 生成报告</button>
+            <select id="homeworkStudent" onchange="summary.loadHomeworkDetail()">
+              <option value="">请选择学生...</option>
+            </select>
+            <button class="btn btn-primary" id="homeworkGenerateBtn" onclick="summary.generateHomework()" disabled>✨ 生成作业情况报告</button>
           </div>
+
+          <!-- 当天批改明细表（按科目合并多次批改） -->
+          <div id="homeworkDetail" class="summary-content">
+            <p class="hint">请选择学生查看当天作业情况</p>
+          </div>
+
+          <!-- AI 报告输出区 -->
           <div id="summaryContent" class="summary-content"></div>
           <div id="summaryActions" class="summary-actions" style="display:none">
             <button class="btn btn-outline" onclick="summary.copySummary()">📋 复制</button>
             <button class="btn btn-primary" onclick="summary.regenerate()">🔄 重新生成</button>
           </div>
+
           <div class="history-section">
             <div class="history-head"><h4>📚 历史记录</h4></div>
             <div id="homeworkHistory"></div>

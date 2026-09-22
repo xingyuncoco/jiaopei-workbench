@@ -1008,48 +1008,291 @@ let selectedImageFile = null;
 async function initCorrectPage() {
   updateStudentSelect('correctStudentSelect');
   updateSubjectSelect('correctSubjectSelect');
-  document.getElementById('correctResult').style.display = 'none';
+  correct.reset();
 }
 
 const correct = {
-  triggerUpload() {
-    document.getElementById('imageInput').click();
+  // 本次批改的状态
+  photos: [],          // [{ file, dataUrl, pageNumber, aiResult|null }]
+  results: [],         // AI 返回的解析结果，与 photos 一一对应
+
+  reset() {
+    this.photos = [];
+    this.results = [];
+    const fileInput = document.getElementById('correctImagesInput');
+    if (fileInput) fileInput.value = '';
+    this._renderThumbs();
+    this._refreshButtons();
+    const result = document.getElementById('correctResult');
+    if (result) result.style.display = 'none';
+    const saveBtn = document.getElementById('correctSaveBtn');
+    if (saveBtn) saveBtn.style.display = 'none';
   },
 
-  handleImageSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+  onContextChange() {
+    // 切换学生/科目时清掉已选照片
+    this.reset();
+  },
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('图片大小不能超过10MB');
+  triggerAddPhotos() {
+    document.getElementById('correctImagesInput').click();
+  },
+
+  handleImagesSelect(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    // 限制：单张 ≤ 10MB，已选 ≤ 5 张
+    const remaining = 5 - this.photos.length;
+    if (remaining <= 0) {
+      toast.error('本次批改最多 5 张照片');
       return;
     }
+    const accepted = files.slice(0, remaining);
+    if (files.length > remaining) {
+      toast.warning(`只取前 ${remaining} 张，请分多次批改`);
+    }
+    accepted.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} 超过 10MB，已跳过`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.photos.push({
+          file,
+          dataUrl: e.target.result,
+          pageNumber: this.photos.length + 1,
+          aiResult: null
+        });
+        this._renderThumbs();
+        this._refreshButtons();
+      };
+      reader.readAsDataURL(file);
+    });
+  },
 
-    selectedImageFile = file;
+  _renderThumbs() {
+    const wrap = document.getElementById('correctThumbnails');
+    if (!wrap) return;
+    if (this.photos.length === 0) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = this.photos.map((p, i) => `
+      <div class="correct-thumb ${p.aiResult ? 'is-graded' : ''}">
+        <img src="${p.dataUrl}">
+        <span class="correct-thumb-page">第 ${p.pageNumber} 页${p.aiResult ? ' · ✅' : ''}</span>
+        <button class="correct-thumb-del" onclick="correct.removePhoto(${i})">×</button>
+      </div>
+    `).join('');
+  },
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const preview = document.getElementById('previewImage');
-      const hint = document.querySelector('.upload-hint');
-      preview.src = e.target.result;
-      preview.style.display = 'block';
-      hint.style.display = 'none';
-      document.getElementById('correctBtn').disabled = false;
-    };
-    reader.readAsDataURL(file);
+  removePhoto(i) {
+    this.photos.splice(i, 1);
+    this.results.splice(i, 1);
+    // 重排页码
+    this.photos.forEach((p, idx) => p.pageNumber = idx + 1);
+    this._renderThumbs();
+    this._refreshButtons();
+  },
+
+  _refreshButtons() {
+    document.getElementById('correctPhotoCount').textContent = `已选 ${this.photos.length} 张`;
+    const studentId = document.getElementById('correctStudentSelect').value;
+    const subjectId = document.getElementById('correctSubjectSelect').value;
+    document.getElementById('correctBtn').disabled =
+      !(this.photos.length > 0 && studentId && subjectId);
   },
 
   async startCorrect() {
-    toast.error('此功能需要后端支持，请先完成服务器部署');
+    const studentId = document.getElementById('correctStudentSelect').value;
+    const subjectId = document.getElementById('correctSubjectSelect').value;
+    if (!studentId || !subjectId) { toast.error('请选择学生和科目'); return; }
+    if (this.photos.length === 0) { toast.error('请先添加照片'); return; }
+
+    loading.show('AI 批改中...');
+    try {
+      const token = await authAPI.getAccessToken();
+      if (!token) { toast.error('登录已失效'); return; }
+      const subject = state.subjects.find(s => s.id === subjectId);
+      const subjectName = subject?.name || '';
+
+      this.results = [];
+      // 逐张调 AI
+      for (let i = 0; i < this.photos.length; i++) {
+        const photo = this.photos[i];
+        const resp = await fetch('/api/grade-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            imageBase64: photo.dataUrl,
+            subject: subjectName,
+            pageNumber: photo.pageNumber
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.result) {
+          throw new Error(data.error || `第 ${photo.pageNumber} 张批改失败`);
+        }
+        this.results.push(data.result);
+        photo.aiResult = data.result;
+        this._renderThumbs();
+      }
+
+      this._renderResult();
+      document.getElementById('correctSaveBtn').style.display = 'block';
+      toast.success('批改完成');
+    } catch (error) {
+      console.error('批改失败:', error);
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
   },
 
-  reset() {
-    selectedImageFile = null;
-    document.getElementById('imageInput').value = '';
-    document.getElementById('previewImage').style.display = 'none';
-    document.querySelector('.upload-hint').style.display = 'block';
-    document.getElementById('correctBtn').disabled = true;
-    document.getElementById('correctResult').style.display = 'none';
+  // 聚合多张结果给老师看
+  _renderResult() {
+    const container = document.getElementById('correctResult');
+    container.style.display = 'block';
+
+    let totalQ = 0, correct = 0, wrong = 0, blank = 0;
+    this.results.forEach(r => {
+      totalQ += r.total || 0;
+      correct += r.correct || 0;
+      wrong  += r.wrong  || 0;
+      blank  += r.blank  || 0;
+    });
+    const accuracy = totalQ > 0 ? Math.round(correct / totalQ * 100) : 0;
+
+    const weakSet = new Set();
+    this.results.forEach(r => (r.weak_points || []).forEach(w => weakSet.add(w)));
+    const advices = this.results.map(r => r.advice).filter(Boolean);
+
+    const pagesHtml = this.results.map((r, i) => {
+      const qHtml = (r.questions || []).map(q => {
+        const cls = q.status === 'correct' ? 'q-correct' :
+                    q.status === 'wrong'   ? 'q-wrong'   : 'q-blank';
+        const label = q.status === 'correct' ? '✅' : q.status === 'wrong' ? '❌' : '⬜';
+        const reason = q.wrong_reason ? `<div class="q-meta">错因：${q.wrong_reason}</div>` : '';
+        const process = q.process ? `<div class="q-meta">思路：${q.process}</div>` : '';
+        return `
+          <div class="q-item ${cls}">
+            <div><strong>${label} 第 ${q.index} 题</strong> · ${q.student_answer || '（未答）'}</div>
+            ${q.correct_answer ? `<div class="q-meta">标准：${q.correct_answer}</div>` : ''}
+            ${process}
+            ${reason}
+          </div>`;
+      }).join('');
+      return `
+        <div class="grade-page">
+          <div class="grade-page-head">
+            <strong>📷 第 ${i + 1} 页</strong>
+            <span>共 ${r.total || 0} 题，对 ${r.correct || 0} / 错 ${r.wrong || 0} / 未答 ${r.blank || 0}</span>
+          </div>
+          <div class="grade-questions">${qHtml || '<p class="empty-tip">未识别到题目</p>'}</div>
+          ${r.advice ? `<div class="grade-advice">💡 ${r.advice}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const weakHtml = [...weakSet].length
+      ? `<div class="grade-weak"><h4>📊 本次薄弱点</h4><ul>${[...weakSet].map(w => `<li>${w}</li>`).join('')}</ul></div>`
+      : '';
+    const teacherHtml = advices.length
+      ? `<div class="grade-teacher"><h4>🎓 给老师的建议</h4><ul>${advices.map(a => `<li>${a}</li>`).join('')}</ul></div>`
+      : '';
+
+    container.innerHTML = `
+      <div class="grade-summary">
+        <div class="grade-stat"><div class="grade-stat-val">${totalQ}</div><div class="grade-stat-lbl">总题数</div></div>
+        <div class="grade-stat"><div class="grade-stat-val">${correct}</div><div class="grade-stat-lbl">做对</div></div>
+        <div class="grade-stat"><div class="grade-stat-val">${wrong}</div><div class="grade-stat-lbl">做错</div></div>
+        <div class="grade-stat"><div class="grade-stat-val">${blank}</div><div class="grade-stat-lbl">未答</div></div>
+        <div class="grade-stat grade-stat-acc"><div class="grade-stat-val">${accuracy}%</div><div class="grade-stat-lbl">准确率</div></div>
+      </div>
+      ${weakHtml}
+      ${teacherHtml}
+      <div class="grade-pages">${pagesHtml}</div>
+    `;
+  },
+
+  // 保存为一条 homework_reports + 多条 homework_report_photos
+  async saveAll() {
+    const studentId = document.getElementById('correctStudentSelect').value;
+    const subjectId = document.getElementById('correctSubjectSelect').value;
+    if (!studentId || !subjectId) { toast.error('请选择学生和科目'); return; }
+    if (!this.results.length) { toast.error('请先批改'); return; }
+
+    loading.show('保存中...');
+    try {
+      const userResult = await supabaseClient.auth.getUser();
+      const userId = userResult.data?.user?.id;
+
+      // 聚合数据
+      let totalQ = 0, correct = 0, wrong = 0, blank = 0;
+      const weakSet = new Set();
+      this.results.forEach(r => {
+        totalQ += r.total || 0;
+        correct += r.correct || 0;
+        wrong  += r.wrong  || 0;
+        blank  += r.blank  || 0;
+        (r.weak_points || []).forEach(w => weakSet.add(w));
+      });
+      const accuracy = totalQ > 0 ? Math.round(correct / totalQ * 100) : 0;
+
+      // 找当天的 homework_plans 中匹配学生+科目+日期的那一条，作为关联
+      let planId = null;
+      const plan = state.plans.find(p =>
+        p.student_id === studentId &&
+        p.subject_id === subjectId &&
+        p.plan_date === state.currentDate
+      );
+      if (plan) planId = plan.id;
+
+      // 写 homework_reports
+      const { report } = await reportsAPI.create({
+        student_id: studentId,
+        subject_id: subjectId,
+        plan_date: state.currentDate,
+        plan_id: planId,
+        accuracy,
+        total_questions: totalQ,
+        correct_count: correct,
+        wrong_count: wrong,
+        blank_count: blank,
+        weak_points: [...weakSet].join('；') || null,
+        photo_count: this.photos.length,
+        user_id: userId
+      });
+
+      // 逐张写入照片表
+      for (let i = 0; i < this.photos.length; i++) {
+        const photo = this.photos[i];
+        const r = this.results[i] || {};
+        await reportPhotosAPI.save({
+          report_id: report.id,
+          page_number: photo.pageNumber,
+          image_data: photo.dataUrl,
+          ai_result: r,
+          question_count: r.total || 0,
+          correct_count: r.correct || 0,
+          wrong_count: r.wrong || 0,
+          blank_count: r.blank || 0
+        });
+      }
+
+      // 自动标记规划为已完成
+      if (planId) {
+        try { await plansAPI.toggleComplete(planId, true); } catch (_) {}
+      }
+
+      toast.success(`已保存 ${this.photos.length} 张照片`);
+      document.getElementById('correctSaveBtn').style.display = 'none';
+    } catch (error) {
+      console.error('保存失败:', error);
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
   }
 };
 

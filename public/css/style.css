@@ -625,6 +625,195 @@ html, body {
   box-shadow: var(--shadow);
 }
 
+/* 多图批改：照片栏 */
+.correct-photos-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 8px;
+  padding: 8px 10px;
+  background: var(--gray-50);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+.correct-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.correct-thumb {
+  position: relative;
+  aspect-ratio: 3/4;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+}
+
+.correct-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.correct-thumb.is-graded {
+  border-color: #10B981;
+  border-width: 2px;
+}
+
+.correct-thumb-page {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  text-align: center;
+  padding: 2px 0;
+}
+
+.correct-thumb-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+/* 批改结果区 */
+.correct-result {
+  margin-top: 16px;
+}
+
+.grade-summary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.grade-stat {
+  background: var(--white);
+  border-radius: 10px;
+  padding: 10px 4px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+
+.grade-stat-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gray-800);
+}
+
+.grade-stat-lbl {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
+
+.grade-stat-acc .grade-stat-val {
+  color: var(--primary);
+}
+
+.grade-weak,
+.grade-teacher {
+  background: #FFFBEB;
+  border-left: 3px solid #F59E0B;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.grade-teacher {
+  background: #EFF6FF;
+  border-left-color: var(--primary);
+}
+
+.grade-weak h4,
+.grade-teacher h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+
+.grade-weak ul,
+.grade-teacher ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--gray-700);
+  line-height: 1.6;
+}
+
+.grade-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grade-page {
+  background: var(--white);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
+
+.grade-page-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--gray-700);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.grade-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.q-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.q-correct { background: #ECFDF5; color: #065F46; }
+.q-wrong   { background: #FEF2F2; color: #991B1B; }
+.q-blank   { background: #F3F4F6; color: #6B7280; }
+
+.q-meta {
+  font-size: 11px;
+  margin-top: 2px;
+  color: var(--gray-500);
+}
+
+.grade-advice {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: #EEF2FF;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--primary);
+}
+
 .form-group {
   margin-bottom: 20px;
 }

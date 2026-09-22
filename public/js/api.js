@@ -109,6 +109,38 @@ window.studentsAPI = {
   }
 }
 
+// 批改照片（一张照片一行）
+window.reportPhotosAPI = {
+  async listByReport(reportId) {
+    const result = await supabaseClient
+      .from('homework_report_photos')
+      .select('*')
+      .eq('report_id', reportId)
+      .order('page_number', { ascending: true })
+    if (result.error) throw result.error
+    return { photos: result.data }
+  },
+
+  async save(photo) {
+    const result = await supabaseClient
+      .from('homework_report_photos')
+      .insert(photo)
+      .select()
+      .single()
+    if (result.error) throw result.error
+    return { photo: result.data }
+  },
+
+  async delete(photoId) {
+    const result = await supabaseClient
+      .from('homework_report_photos')
+      .delete()
+      .eq('id', photoId)
+    if (result.error) throw result.error
+    return { success: true }
+  }
+}
+
 // 总结历史记录
 window.summaryHistoryAPI = {
   async list(kind, studentId) {

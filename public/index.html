@@ -153,7 +153,7 @@
         <div id="subjectsList" class="item-list"></div>
       </section>
 
-      <!-- 拍照批改页面 -->
+      <!-- 拍照批改页面（多图版） -->
       <section id="correctPage" class="page">
         <div class="page-header">
           <button class="back-btn" onclick="router.navigate('home')">← 返回</button>
@@ -163,29 +163,32 @@
         <div class="correct-form">
           <div class="form-group">
             <label>选择学生：</label>
-            <select id="correctStudentSelect">
+            <select id="correctStudentSelect" onchange="correct.onContextChange()">
               <option value="">请选择学生</option>
             </select>
           </div>
 
           <div class="form-group">
             <label>选择科目：</label>
-            <select id="correctSubjectSelect">
+            <select id="correctSubjectSelect" onchange="correct.onContextChange()">
               <option value="">请选择科目</option>
             </select>
           </div>
 
-          <div class="upload-area" id="uploadArea" onclick="correct.triggerUpload()">
-            <input type="file" id="imageInput" accept="image/*" capture="environment" style="display:none" onchange="correct.handleImageSelect(event)">
-            <div class="upload-hint">
-              <div class="upload-icon">📷</div>
-              <p>点击拍照或上传作业图片</p>
-            </div>
-            <img id="previewImage" class="preview-image" style="display:none">
-          </div>
+          <div class="correct-photos-bar">
+             <span id="correctPhotoCount">已选 0 张</span>
+             <input type="file" id="correctImagesInput" accept="image/*" multiple style="display:none" onchange="correct.handleImagesSelect(event)">
+             <button class="btn btn-outline btn-sm" onclick="correct.triggerAddPhotos()">＋ 添加照片</button>
+           </div>
+
+          <div id="correctThumbnails" class="correct-thumbs"></div>
 
           <button id="correctBtn" class="btn btn-primary btn-full" onclick="correct.startCorrect()" disabled>
             🔍 开始批改
+          </button>
+
+          <button id="correctSaveBtn" class="btn btn-outline btn-full" onclick="correct.saveAll()" style="display:none;margin-top:8px">
+            💾 保存到作业规划
           </button>
         </div>
 

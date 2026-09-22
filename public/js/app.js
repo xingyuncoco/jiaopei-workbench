@@ -472,14 +472,23 @@ async function loadPlans() {
       const timeRange = plan.start_time && plan.end_time
         ? `${plan.start_time}-${plan.end_time}`
         : '未设置时间';
+      const LESSON_TYPE_MAP = Object.fromEntries(window.LESSON_TYPES.map(t => [t.value, t.label]));
+      const lessonLabel = LESSON_TYPE_MAP[plan.lesson_type] || '作业';
+      const isBreak = plan.subject?.is_break;
+      const duration = plan.duration_minutes || (plan.start_time && plan.end_time ? minutesBetween(plan.start_time, plan.end_time) : 0);
+      const durationText = duration ? `${duration} 分钟` : '';
+      const strategyHtml = plan.core_strategy ? `<div class="plan-item-meta">🎯 ${plan.core_strategy}</div>` : '';
+      const todayPlanHtml = plan.today_plan ? `<div class="plan-item-meta">📝 ${plan.today_plan}</div>` : '';
 
       html += `
-        <div class="plan-item">
+        <div class="plan-item ${isBreak ? 'plan-item-break' : ''}">
           <div class="plan-item-left">
             <span class="plan-item-icon">${subjectIcon}</span>
             <div class="plan-item-info">
-              <h4>${subjectName}</h4>
-              <p>${timeRange}</p>
+              <h4>${subjectName} <em class="lesson-tag ${plan.lesson_type}">${lessonLabel}</em></h4>
+              <p>${timeRange}${durationText ? ' · 计划用时 ' + durationText : ''}</p>
+              ${strategyHtml}
+              ${todayPlanHtml}
             </div>
           </div>
           <div class="plan-item-status">
@@ -523,9 +532,10 @@ const plans = {
       return;
     }
 
+    // 15 分钟间隔
     let timeOptions = '';
     for (let h = 8; h <= 22; h++) {
-      for (let m = 0; m < 60; m += 30) {
+      for (let m = 0; m < 60; m += 15) {
         const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         timeOptions += `<option value="${time}">${time}</option>`;
       }
@@ -533,22 +543,46 @@ const plans = {
 
     let subjectOptions = '';
     state.subjects.forEach(subject => {
-      subjectOptions += `<option value="${subject.id}">${subject.icon} ${subject.name}</option>`;
+      const tag = subject.is_break ? '⏸' : '';
+      subjectOptions += `<option value="${subject.id}" data-break="${subject.is_break ? '1' : '0'}">${subject.icon} ${subject.name} ${tag}</option>`;
     });
 
-    modal.show('添加科目', `
+    // 默认选项：作业（所有非休息科目都包含）+ 休息（休息科目自动只有 break）
+    const lessonTypeOptions = window.LESSON_TYPES.map(lt =>
+      `<option value="${lt.value}">${lt.label}</option>`
+    ).join('');
+
+    modal.show('添加规划', `
       <div class="modal-form">
         <div class="form-item">
           <label>科目 *</label>
-          <select id="planSubject">${subjectOptions}</select>
+          <select id="planSubject" onchange="plans._onSubjectChange()">${subjectOptions}</select>
         </div>
         <div class="form-item">
-          <label>开始时间</label>
-          <select id="planStartTime">${timeOptions}</select>
+          <label>课型 *</label>
+          <select id="planLessonType">${lessonTypeOptions}</select>
+        </div>
+        <div class="form-item time-row">
+          <div class="time-col">
+            <label>开始时间</label>
+            <select id="planStartTime" onchange="plans._onTimeChange()">${timeOptions}</select>
+          </div>
+          <div class="time-col">
+            <label>结束时间</label>
+            <select id="planEndTime" onchange="plans._onTimeChange()">${timeOptions}</select>
+          </div>
+          <div class="time-col time-duration">
+            <label>计划用时</label>
+            <span id="planDuration" class="duration-display">—</span>
+          </div>
         </div>
         <div class="form-item">
-          <label>结束时间</label>
-          <select id="planEndTime">${timeOptions}</select>
+          <label>今日核心策略</label>
+          <textarea id="planCoreStrategy" rows="2" placeholder="例：先订正错题再做新题"></textarea>
+        </div>
+        <div class="form-item">
+          <label>今日预计规划</label>
+          <textarea id="planTodayPlan" rows="2" placeholder="例：错题订正 + 课本例题 + 课后 5 题"></textarea>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
@@ -556,18 +590,65 @@ const plans = {
         </div>
       </div>
     `);
+
+    // 默认选中第一个非休息科目 + 配套课型
+    const sel = document.getElementById('planSubject');
+    if (sel) sel.selectedIndex = 0;
+    this._onSubjectChange();
+  },
+
+  // 选了科目后，课型下拉只保留该科目允许的项
+  _onSubjectChange() {
+    const subjectId = document.getElementById('planSubject').value;
+    const subject = state.subjects.find(s => s.id === subjectId);
+    if (!subject) return;
+    const sel = document.getElementById('planLessonType');
+    const allowed = subject.is_break
+      ? ['break']
+      : (subject.default_lesson_types && subject.default_lesson_types.length ? subject.default_lesson_types : ['homework']);
+    sel.innerHTML = window.LESSON_TYPES.filter(lt => allowed.includes(lt.value))
+      .map(lt => `<option value="${lt.value}">${lt.label}</option>`).join('');
+    this._onTimeChange();
+  },
+
+  // 根据 start_time/end_time 自动算计划用时
+  _onTimeChange() {
+    const s = document.getElementById('planStartTime').value;
+    const e = document.getElementById('planEndTime').value;
+    const out = document.getElementById('planDuration');
+    if (!out) return;
+    if (!s || !e || e <= s) { out.textContent = '—'; return; }
+    const [sh, sm] = s.split(':').map(Number);
+    const [eh, em] = e.split(':').map(Number);
+    const minutes = (eh * 60 + em) - (sh * 60 + sm);
+    out.textContent = minutes >= 60 ? `${(minutes / 60).toFixed(1)} 小时（${minutes} 分钟）` : `${minutes} 分钟`;
   },
 
   async save() {
     const studentId = document.getElementById('planStudentSelect').value;
     const subjectId = document.getElementById('planSubject').value;
+    const lessonType = document.getElementById('planLessonType').value;
     const startTime = document.getElementById('planStartTime').value;
     const endTime = document.getElementById('planEndTime').value;
+    const coreStrategy = document.getElementById('planCoreStrategy').value.trim() || null;
+    const todayPlan = document.getElementById('planTodayPlan').value.trim() || null;
 
     if (!subjectId) {
       toast.error('请选择科目');
       return;
     }
+    if (!startTime || !endTime) {
+      toast.error('请选择开始和结束时间');
+      return;
+    }
+    if (endTime <= startTime) {
+      toast.error('结束时间必须晚于开始时间');
+      return;
+    }
+
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    const durationMinutes = (eh * 60 + em) - (sh * 60 + sm);
 
     loading.show('添加中...');
 
@@ -576,8 +657,12 @@ const plans = {
         student_id: studentId,
         subject_id: subjectId,
         plan_date: state.currentDate,
-        start_time: startTime || null,
-        end_time: endTime || null
+        lesson_type: lessonType,
+        start_time: startTime,
+        end_time: endTime,
+        duration_minutes: durationMinutes,
+        core_strategy: coreStrategy,
+        today_plan: todayPlan
       });
 
       toast.success('添加成功');
@@ -625,22 +710,37 @@ const plans = {
       return;
     }
 
-    let text = `【${student.name} 今日作业规划】${formatFullDate(state.currentDate)}\n`;
+    const LESSON_TYPE_MAP = Object.fromEntries(window.LESSON_TYPES.map(t => [t.value, t.label]));
+
+    let text = `【${student.name} 今日作业规划】${formatFullDate(state.currentDate)}\n\n`;
 
     state.plans.forEach(plan => {
       const icon = plan.subject?.icon || '📝';
       const name = plan.subject?.name || '未知';
-      const time = plan.start_time && plan.end_time
-        ? `${plan.start_time}-${plan.end_time}`
-        : '未安排';
-      const status = plan.is_completed ? '✅' : '⬜';
+      const lessonType = LESSON_TYPE_MAP[plan.lesson_type] || '作业';
+      const hasTime = plan.start_time && plan.end_time;
+      const time = hasTime ? `${plan.start_time}-${plan.end_time}` : '未安排';
+      const duration = hasTime ? `${plan.duration_minutes || minutesBetween(plan.start_time, plan.end_time)} 分钟` : '未安排';
 
-      text += `${icon} ${name} ${time} ${status}\n`;
+      // 例：📐 数学 16:00-16:45 · 作业 · 计划用时 45 分钟 · 已完成 ✅
+      text += `${icon} ${name} ${time} · ${lessonType} · 计划用时 ${duration}`;
+      if (plan.is_completed) text += ` · 已完成 ✅`;
+      text += `\n`;
+
+      if (plan.core_strategy) text += `   核心策略：${plan.core_strategy}\n`;
+      if (plan.today_plan) text += `   今日规划：${plan.today_plan}\n`;
     });
 
     copyToClipboard(text);
   }
 };
+
+function minutesBetween(start, end) {
+  if (!start || !end || end <= start) return 0;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return (eh * 60 + em) - (sh * 60 + sm);
+}
 
 // 科目管理页面
 async function initSubjectsPage() {
@@ -680,22 +780,44 @@ async function loadSubjects() {
 }
 
 const subjects = {
-  showAddModal() {
-    const icons = ['📐', '📝', '📖', '🔬', '⚡', '🧪', '🎨', '🎵', '🏀', '🗣️', '💻', '🌍'];
-    let iconHtml = '';
-    icons.forEach((icon, index) => {
-      iconHtml += `<div class="icon-option ${index === 0 ? 'active' : ''}" data-icon="${icon}">${icon}</div>`;
-    });
+  // 渲染图标选择器
+  _renderIcons(selectedIcon) {
+    const icons = ['📐', '📝', '📖', '🔬', '⚡', '🧪', '🎨', '🎵', '🏀', '🗣️', '💻', '🌍', '☕', '🍱', '⏸️'];
+    return icons.map(icon =>
+      `<div class="icon-option ${icon === selectedIcon ? 'active' : ''}" data-icon="${icon}">${icon}</div>`
+    ).join('');
+  },
 
+  // 渲染课型多选
+  _renderLessonTypes(selected) {
+    return window.LESSON_TYPES.map(lt =>
+      `<label class="checkbox-item">
+        <input type="checkbox" value="${lt.value}" ${(selected || []).includes(lt.value) ? 'checked' : ''}>
+        <span>${lt.label}</span>
+      </label>`
+    ).join('');
+  },
+
+  showAddModal() {
     modal.show('添加科目', `
       <div class="modal-form">
         <div class="form-item">
           <label>科目名称 *</label>
-          <input type="text" id="subjectName" placeholder="如：数学">
+          <input type="text" id="subjectName" placeholder="如：数学 / 休息">
         </div>
         <div class="form-item">
           <label>选择图标</label>
-          <div class="icon-picker" id="iconPicker">${iconHtml}</div>
+          <div class="icon-picker" id="iconPicker">${this._renderIcons('📝')}</div>
+        </div>
+        <div class="form-item">
+          <label>
+              <input type="checkbox" id="subjectIsBreak" onchange="subjects._onBreakToggle()">
+              标记为休息科目
+            </label>
+        </div>
+        <div class="form-item" id="lessonTypesWrap">
+          <label>支持的课型（勾选后可在规划里使用）</label>
+          <div class="checkbox-grid">${this._renderLessonTypes(['homework'])}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
@@ -703,24 +825,13 @@ const subjects = {
         </div>
       </div>
     `);
-
-    document.querySelectorAll('.icon-option').forEach(el => {
-      el.addEventListener('click', () => {
-        document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('active'));
-        el.classList.add('active');
-      });
-    });
+    this._bindIconPicker();
+    this._onBreakToggle();
   },
 
   showEditModal(id) {
     const subject = state.subjects.find(s => s.id === id);
     if (!subject) return;
-
-    const icons = ['📐', '📝', '📖', '🔬', '⚡', '🧪', '🎨', '🎵', '🏀', '🗣️', '💻', '🌍'];
-    let iconHtml = '';
-    icons.forEach(icon => {
-      iconHtml += `<div class="icon-option ${icon === subject.icon ? 'active' : ''}" data-icon="${icon}">${icon}</div>`;
-    });
 
     modal.show('编辑科目', `
       <div class="modal-form">
@@ -730,7 +841,17 @@ const subjects = {
         </div>
         <div class="form-item">
           <label>选择图标</label>
-          <div class="icon-picker" id="iconPicker">${iconHtml}</div>
+          <div class="icon-picker" id="iconPicker">${this._renderIcons(subject.icon || '📝')}</div>
+        </div>
+        <div class="form-item">
+          <label>
+            <input type="checkbox" id="subjectIsBreak" ${subject.is_break ? 'checked' : ''} onchange="subjects._onBreakToggle()">
+            标记为休息科目
+          </label>
+        </div>
+        <div class="form-item" id="lessonTypesWrap">
+          <label>支持的课型</label>
+          <div class="checkbox-grid">${this._renderLessonTypes(subject.default_lesson_types || [])}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
@@ -738,7 +859,11 @@ const subjects = {
         </div>
       </div>
     `);
+    this._bindIconPicker();
+    this._onBreakToggle();
+  },
 
+  _bindIconPicker() {
     document.querySelectorAll('.icon-option').forEach(el => {
       el.addEventListener('click', () => {
         document.querySelectorAll('.icon-option').forEach(opt => opt.classList.remove('active'));
@@ -747,10 +872,25 @@ const subjects = {
     });
   },
 
+  // 勾选休息时，课型多选自动禁用 + 自动勾"休息"
+  _onBreakToggle() {
+    const isBreak = document.getElementById('subjectIsBreak').checked;
+    const wrap = document.getElementById('lessonTypesWrap');
+    if (!wrap) return;
+    wrap.style.opacity = isBreak ? '0.4' : '1';
+    wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.disabled = isBreak;
+      if (isBreak) cb.checked = cb.value === 'break';
+      else if (cb.value === 'break') cb.checked = false;
+    });
+  },
+
   async save(id) {
     const name = document.getElementById('subjectName').value.trim();
     const activeIcon = document.querySelector('.icon-option.active');
     const icon = activeIcon ? activeIcon.dataset.icon : '📝';
+    const isBreak = document.getElementById('subjectIsBreak').checked;
+    const lessonTypes = Array.from(document.querySelectorAll('#lessonTypesWrap input:checked')).map(cb => cb.value);
 
     if (!name) {
       toast.error('请输入科目名称');
@@ -761,10 +901,10 @@ const subjects = {
 
     try {
       if (id) {
-        await subjectsAPI.update(id, { name, icon });
+        await subjectsAPI.update(id, { name, icon, is_break: isBreak, default_lesson_types: lessonTypes });
         toast.success('修改成功');
       } else {
-        await subjectsAPI.create({ name, icon });
+        await subjectsAPI.create({ name, icon, is_break: isBreak, default_lesson_types: lessonTypes });
         toast.success('添加成功');
       }
 

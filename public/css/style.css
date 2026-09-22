@@ -1241,6 +1241,84 @@ html, body {
   text-align: center;
 }
 
+/* 规划新增表单：时间行 + 用时显示 */
+.time-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.time-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.time-duration .duration-display {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--primary);
+  background: var(--gray-50);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-weight: 600;
+}
+
+/* 课型多选 */
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--gray-700);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.checkbox-item input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
+/* 规划列表：课型标签 + 用时 + 休息行 */
+.lesson-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 4px;
+  font-size: 11px;
+  font-style: normal;
+  background: var(--gray-100);
+  color: var(--gray-500);
+  border-radius: 4px;
+}
+
+.lesson-tag.homework  { background: #EEF2FF; color: var(--primary); }
+.lesson-tag.practice  { background: #FEF3C7; color: #92400E; }
+.lesson-tag.test      { background: #FEE2E2; color: #991B1B; }
+.lesson-tag.hardpoint { background: #D1FAE5; color: #065F46; }
+.lesson-tag.class     { background: #DBEAFE; color: #1E40AF; }
+.lesson-tag.oneon_tt1 { background: #FCE7F3; color: #9D174D; }
+.lesson-tag.break     { background: #F3F4F6; color: #6B7280; }
+
+.plan-item-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--gray-500);
+  line-height: 1.4;
+}
+
+.plan-item-break {
+  background: #FAFAFA;
+  border-left: 3px solid var(--gray-300);
+}
+
 .profile-section-head h3 {
   font-size: 15px;
   color: var(--gray-800);

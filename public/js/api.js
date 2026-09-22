@@ -11,6 +11,17 @@ const supabaseAnonKey = 'sb_publishable_ZXRrPVhLS6CvOQV5JYnBmA_0PiaL0xT'
 // 通过全局变量 supabase 访问 CDN 加载的 SDK
 const supabaseClient = supabase.createClient(SUPABASE_URL, supabaseAnonKey)
 
+// 课型字典（与库表 lesson_type check 保持一致）
+window.LESSON_TYPES = [
+  { value: 'homework',  label: '作业' },
+  { value: 'practice',  label: '练习' },
+  { value: 'test',      label: '测试' },
+  { value: 'hardpoint', label: '难点讲解' },
+  { value: 'class',     label: '小班课' },
+  { value: 'oneon_tt1', label: '一对一' },
+  { value: 'break',     label: '休息' }
+]
+
 /**
  * 认证相关 API
  * 说明：Supabase SDK 会自动把会话持久化到 localStorage，
@@ -295,6 +306,9 @@ window.subjectsAPI = {
     return { subjects: result.data }
   },
 
+  // 课型字典（与法保持与库表 check 一致）
+  // static 不可用于对象方法之间，改用 window.LESSON_TYPES 全局常量
+
   async create(subjectData) {
     const userResult = await supabaseClient.auth.getUser()
     const userId = userResult.data?.user?.id
@@ -340,7 +354,7 @@ window.plansAPI = {
       .select(`
         *,
         student:students(id, name, grade),
-        subject:subjects(id, name, icon)
+        subject:subjects(id, name, icon, is_break)
       `)
 
     if (params.date) {
@@ -366,7 +380,7 @@ window.plansAPI = {
       .select(`
         *,
         student:students(id, name, grade),
-        subject:subjects(id, name, icon)
+        subject:subjects(id, name, icon, is_break)
       `)
       .single()
 
@@ -382,7 +396,7 @@ window.plansAPI = {
       .select(`
         *,
         student:students(id, name, grade),
-        subject:subjects(id, name, icon)
+        subject:subjects(id, name, icon, is_break)
       `)
       .single()
 

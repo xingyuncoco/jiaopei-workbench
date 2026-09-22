@@ -603,9 +603,15 @@ const plans = {
     const subject = state.subjects.find(s => s.id === subjectId);
     if (!subject) return;
     const sel = document.getElementById('planLessonType');
-    const allowed = subject.is_break
-      ? ['break']
-      : (subject.default_lesson_types && subject.default_lesson_types.length ? subject.default_lesson_types : ['homework']);
+    // 休息科目只允许"休息"；其它科目：未配置 default_lesson_types 时显示全部 6 类（仅缺"休息"）
+    let allowed;
+    if (subject.is_break) {
+      allowed = ['break'];
+    } else if (subject.default_lesson_types && subject.default_lesson_types.length > 0) {
+      allowed = subject.default_lesson_types;
+    } else {
+      allowed = window.LESSON_TYPES.map(lt => lt.value).filter(v => v !== 'break');
+    }
     sel.innerHTML = window.LESSON_TYPES.filter(lt => allowed.includes(lt.value))
       .map(lt => `<option value="${lt.value}">${lt.label}</option>`).join('');
     this._onTimeChange();

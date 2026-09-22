@@ -230,32 +230,85 @@ async function updateQuickList() {
   if (dateLabel) dateLabel.textContent = state.currentDate;
 
   try {
-    const plansRes = await plansAPI.list({ date: state.currentDate });
+    const [plansRes, studentsRes] = await Promise.all([
+      plansAPI.list({ date: state.currentDate }),
+      studentsAPI.list()
+    ]);
     const plans = plansRes.plans || [];
+    const students = studentsRes.students || [];
 
-    if (plans.length === 0) {
-      quickList.innerHTML = '<p class="empty-tip">暂无待办事项</p>';
+    // 1. 收集今天有规划的科目（按创建顺序，休息不进表）
+    const subjectOrder = [];
+    const subjectMap = new Map();
+    plans.forEach(p => {
+      const subj = p.subject;
+      if (!subj || subj.is_break) return;
+      if (!subjectMap.has(subj.id)) {
+        subjectMap.set(subj.id, subj);
+        subjectOrder.push(subj);
+      }
+    });
+
+    // 2. 按学生聚合到科目
+    const byStudent = new Map();
+    plans.forEach(p => {
+      if (!p.student) return;
+      if (!byStudent.has(p.student.id)) byStudent.set(p.student.id, new Map());
+      if (p.subject && !p.subject.is_break) {
+        byStudent.get(p.student.id).set(p.subject.id, p);
+      }
+    });
+
+    if (subjectOrder.length === 0) {
+      quickList.innerHTML = '<p class="empty-tip">今日暂无规划</p>';
       return;
     }
 
-    let html = '';
-    plans.forEach(plan => {
-      const isCompleted = plan.is_completed;
-      const studentName = plan.student?.name || '未知学生';
-      const subjectName = plan.subject?.name || '未知科目';
-      const subjectIcon = plan.subject?.icon || '📝';
+    // 3. 表头
+    const headHtml = `
+      <tr>
+        <th class="quick-th-student">学生</th>
+        ${subjectOrder.map(s => `<th class="quick-th-subject">${s.icon || ''}<br><span class="quick-th-subject-name">${s.name}</span></th>`).join('')}
+      </tr>`;
 
-      html += `
-        <div class="quick-item" onclick="router.navigate('plans')">
-          <div><strong>${studentName}</strong> - ${subjectIcon} ${subjectName}</div>
-          <span class="status-tag ${isCompleted ? 'completed' : 'pending'}">
-            ${isCompleted ? '✅已完成' : '⬜待完成'}
-          </span>
-        </div>
-      `;
+    // 4. 行：有规划的学生才展示，按中文名排序
+    const sortedStudents = students.slice().sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    let bodyHtml = '';
+    let hasAnyRow = false;
+    sortedStudents.forEach(stu => {
+      const stuPlans = byStudent.get(stu.id);
+      if (!stuPlans || stuPlans.size === 0) return;
+      hasAnyRow = true;
+      bodyHtml += `<tr><td class="quick-td-name">${stu.name}</td>`;
+      subjectOrder.forEach(subj => {
+        const plan = stuPlans.get(subj.id);
+        if (plan) {
+          const tip = plan.start_time && plan.end_time ? `title="${plan.start_time}-${plan.end_time}"` : '';
+          bodyHtml += `<td class="quick-td-status ${plan.is_completed ? 'is-done' : 'is-pending'}"
+                          onclick="router.navigate('plans')" ${tip}>
+                         ${plan.is_completed ? '✅' : '⬜'}
+                       </td>`;
+        } else {
+          bodyHtml += '<td class="quick-td-empty">—</td>';
+        }
+      });
+      bodyHtml += '</tr>';
     });
 
-    quickList.innerHTML = html;
+    if (!hasAnyRow) {
+      quickList.innerHTML = '<p class="empty-tip">今日暂无规划</p>';
+      return;
+    }
+
+    quickList.innerHTML = `
+      <div class="quick-table-wrap">
+        <table class="quick-table">
+          <thead>${headHtml}</thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+        <p class="quick-table-legend"><span class="is-done">✅</span> 已完成 <span class="is-pending">⬜</span> 待完成</p>
+      </div>
+    `;
   } catch (error) {
     console.error('加载待办失败:', error);
     quickList.innerHTML = '<p class="empty-tip">加载失败</p>';

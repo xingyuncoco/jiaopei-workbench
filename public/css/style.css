@@ -190,6 +190,114 @@ html, body {
   color: var(--gray-500);
 }
 
+/* 今日待办：表格视图 */
+.quick-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.quick-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.quick-table th,
+.quick-table td {
+  border-bottom: 1px solid var(--gray-100);
+  border-right: 1px solid var(--gray-100);
+  padding: 8px 4px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.quick-table th:last-child,
+.quick-table td:last-child {
+  border-right: none;
+}
+
+.quick-table tr:last-child td {
+  border-bottom: none;
+}
+
+.quick-table thead th {
+  background: var(--gray-50);
+  color: var(--gray-700);
+  font-weight: 600;
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+}
+
+.quick-th-student {
+  text-align: left !important;
+  padding-left: 10px !important;
+  min-width: 64px;
+}
+
+.quick-th-subject {
+  font-size: 11px;
+  min-width: 56px;
+}
+
+.quick-th-subject-name {
+  font-size: 12px;
+}
+
+.quick-td-name {
+  text-align: left;
+  padding-left: 10px;
+  font-weight: 600;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  position: sticky;
+  left: 0;
+}
+
+.quick-td-status {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.quick-td-status:hover {
+  background: var(--gray-50);
+}
+
+.quick-td-status.is-done {
+  background: #ECFDF5;
+  color: #065F46;
+}
+
+.quick-td-status.is-pending {
+  background: #FFF7ED;
+  color: #92400E;
+}
+
+.quick-td-empty {
+  color: var(--gray-300);
+}
+
+.quick-table-legend {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.quick-table-legend .is-done {
+  color: #065F46;
+  font-weight: 600;
+}
+
+.quick-table-legend .is-pending {
+  color: #92400E;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
 .quick-list {
   display: flex;
   flex-direction: column;

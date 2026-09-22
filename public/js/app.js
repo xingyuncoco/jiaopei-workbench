@@ -787,7 +787,7 @@ const plans = {
     }
   },
 
-  copyPlans() {
+  async copyPlans() {
     const studentId = document.getElementById('planStudentSelect').value;
     const student = state.students.find(s => s.id === studentId);
 

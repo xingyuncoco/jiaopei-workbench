@@ -1,17 +1,6 @@
 {
   "name": "jiaopei-workbench",
   "version": "1.0.0",
-  "description": "教培教师工作台 - 移动端H5应用",
-  "scripts": {
-    "dev": "vercel dev",
-    "build": "vercel build",
-    "deploy": "vercel deploy"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0",
-    "@supabase/supabase-js": "^2.45.0"
-  },
-  "devDependencies": {
-    "vercel": "^37.0.0"
-  }
+  "private": true,
+  "description": "教培教师工作台 - 移动端H5应用"
 }

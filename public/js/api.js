@@ -1,246 +1,357 @@
 /**
- * API 封装模块
- * 封装所有与后端的交互
+ * 直接使用 Supabase JavaScript SDK
+ * 浏览器端直接连接数据库
  */
 
-const API_BASE = '/api';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+
+// Supabase 配置 - 从 localStorage 或硬编码获取
+const supabaseUrl = 'https://itcrmmkpblayymqvyzaf.supabase.co'
+const supabaseAnonKey = localStorage.getItem('supabase_anon_key') || ''
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // 获取 token（从 localStorage）
 function getToken() {
   return localStorage.getItem('auth_token') || '';
 }
 
-// 通用请求方法
-async function request(endpoint, options = {}) {
-  const url = `${API_BASE}${endpoint}`;
-  const token = getToken();
-
-  const config = {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-      ...options.headers
-    }
-  };
-
-  try {
-    const response = await fetch(url, config);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || '请求失败');
-    }
-
-    return data;
-  } catch (error) {
-    console.error('API 请求失败:', error);
-    throw error;
-  }
+// 设置认证 token
+export function setAuthToken(token) {
+  localStorage.setItem('auth_token', token)
+  supabase.auth.setSession({
+    access_token: token,
+    refresh_token: ''
+  })
 }
 
 // =============================================
 // 学生相关 API
 // =============================================
 
-const studentsAPI = {
-  // 获取学生列表
+export const studentsAPI = {
   async list() {
-    return request('/students');
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return { students: data }
   },
 
-  // 添加学生
   async create(data) {
-    return request('/students', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData?.user?.id
+
+    const { data, error } = await supabase
+      .from('students')
+      .insert({ ...data, user_id: userId })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return { student: data }
   },
 
-  // 编辑学生
   async update(id, data) {
-    return request(`/students?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
+    const { data: result, error } = await supabase
+      .from('students')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return { student: result }
   },
 
-  // 删除学生
   async delete(id) {
-    return request(`/students?id=${id}`, {
-      method: 'DELETE'
-    });
+    const { error } = await supabase
+      .from('students')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    return { success: true }
   }
-};
+}
 
 // =============================================
 // 科目相关 API
 // =============================================
 
-const subjectsAPI = {
-  // 获取科目列表
+export const subjectsAPI = {
   async list() {
-    return request('/subjects');
+    const { data, error } = await supabase
+      .from('subjects')
+      .select('*')
+      .order('created_at', { ascending: true })
+    
+    if (error) throw error
+    return { subjects: data }
   },
 
-  // 添加科目
   async create(data) {
-    return request('/subjects', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData?.user?.id
+
+    const { data, error } = await supabase
+      .from('subjects')
+      .insert({ ...data, user_id: userId })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return { subject: data }
   },
 
-  // 编辑科目
   async update(id, data) {
-    return request(`/subjects?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
+    const { data: result, error } = await supabase
+      .from('subjects')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return { subject: result }
   },
 
-  // 删除科目
   async delete(id) {
-    return request(`/subjects?id=${id}`, {
-      method: 'DELETE'
-    });
+    const { error } = await supabase
+      .from('subjects')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    return { success: true }
   }
-};
+}
 
 // =============================================
 // 规划相关 API
 // =============================================
 
-const plansAPI = {
-  // 获取规划列表
+export const plansAPI = {
   async list(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    return request(`/plans${query ? '?' + query : ''}`);
+    let query = supabase
+      .from('homework_plans')
+      .select(`
+        *,
+        student:students(id, name, grade),
+        subject:subjects(id, name, icon)
+      `)
+
+    if (params.date) {
+      query = query.eq('plan_date', params.date)
+    }
+    if (params.student_id) {
+      query = query.eq('student_id', params.student_id)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: true })
+    
+    if (error) throw error
+    return { plans: data }
   },
 
-  // 添加规划
   async create(data) {
-    return request('/plans', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData?.user?.id
+
+    const { data: result, error } = await supabase
+      .from('homework_plans')
+      .insert({ ...data, user_id: userId })
+      .select(`
+        *,
+        student:students(id, name, grade),
+        subject:subjects(id, name, icon)
+      `)
+      .single()
+    
+    if (error) throw error
+    return { plan: result }
   },
 
-  // 更新规划
   async update(id, data) {
-    return request(`/plans?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
+    const { data: result, error } = await supabase
+      .from('homework_plans')
+      .update(data)
+      .eq('id', id)
+      .select(`
+        *,
+        student:students(id, name, grade),
+        subject:subjects(id, name, icon)
+      `)
+      .single()
+    
+    if (error) throw error
+    return { plan: result }
   },
 
-  // 删除规划
-  async delete(id) {
-    return request(`/plans?id=${id}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // 切换完成状态
   async toggleComplete(id, isCompleted) {
-    return this.update(id, { is_completed: isCompleted });
-  }
-};
-
-// =============================================
-// 批改相关 API
-// =============================================
-
-const reportsAPI = {
-  // 获取报告列表
-  async list(params = {}) {
-    const query = new URLSearchParams(params).toString();
-    return request(`/reports${query ? '?' + query : ''}`);
+    return this.update(id, { is_completed: isCompleted })
   },
 
-  // 获取单条报告
-  async get(id) {
-    return request(`/reports?id=${id}`);
-  },
-
-  // 提交批改
-  async create(data) {
-    return request('/reports', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-
-  // 删除报告
   async delete(id) {
-    return request(`/reports?id=${id}`, {
-      method: 'DELETE'
-    });
+    const { error } = await supabase
+      .from('homework_plans')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    return { success: true }
   }
-};
+}
+
+// =============================================
+// 批改相关 API（简化版，无 AI）
+// =============================================
+
+export const reportsAPI = {
+  async list(params = {}) {
+    let query = supabase
+      .from('homework_reports')
+      .select(`
+        *,
+        student:students(id, name, grade),
+        subject:subjects(id, name, icon)
+      `)
+
+    if (params.date) {
+      query = query.eq('plan_date', params.date)
+    }
+    if (params.student_id) {
+      query = query.eq('student_id', params.student_id)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return { reports: data }
+  },
+
+  async get(id) {
+    const { data, error } = await supabase
+      .from('homework_reports')
+      .select(`
+        *,
+        student:students(id, name, grade),
+        subject:subjects(id, name, icon)
+      `)
+      .eq('id', id)
+      .single()
+    
+    if (error) throw error
+    return { report: data }
+  },
+
+  async delete(id) {
+    const { error } = await supabase
+      .from('homework_reports')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    return { success: true }
+  }
+}
 
 // =============================================
 // 总结相关 API
 // =============================================
 
-const summariesAPI = {
-  // 获取指定日期总结
+export const summariesAPI = {
   async get(date) {
-    return request(`/summaries?date=${date}`);
+    const { data, error } = await supabase
+      .from('daily_summaries')
+      .select('*')
+      .eq('summary_date', date)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') throw error
+    return { summary: data || null }
   },
 
-  // 生成总结
   async generate(date) {
-    return request('/summaries/generate', {
-      method: 'POST',
-      body: JSON.stringify({ date })
-    });
-  },
+    // 获取统计数据
+    const { count: totalStudents } = await supabase
+      .from('students')
+      .select('*', { count: 'exact', head: true })
 
-  // 更新总结
-  async update(id, data) {
-    return request(`/summaries?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  }
-};
+    const { data: plans } = await supabase
+      .from('homework_plans')
+      .select(`*, subject:subjects(id, name)`)
+      .eq('plan_date', date)
 
-// =============================================
-// 文件上传 API（示例，实际需要配合 Supabase Storage）
-// =============================================
+    const { data: reports } = await supabase
+      .from('homework_reports')
+      .select(`*, subject:subjects(id, name)`)
+      .eq('plan_date', date)
 
-const uploadAPI = {
-  async uploadImage(file) {
-    // 这里需要实现图片上传到 Supabase Storage
-    // 返回公开 URL
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch(`${API_BASE}/upload`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${getToken()}`
-      },
-      body: formData
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || '上传失败');
+    // 统计
+    const subjectStats = {}
+    if (plans) {
+      plans.forEach(p => {
+        const name = p.subject?.name || '未知'
+        if (!subjectStats[name]) {
+          subjectStats[name] = { name, total: 0, completed: 0, accuracies: [] }
+        }
+        subjectStats[name].total++
+        if (p.is_completed) subjectStats[name].completed++
+      })
     }
 
-    return data.url;
-  }
-};
+    const completedStudents = new Set(
+      plans?.filter(p => p.is_completed).map(p => p.student_id) || []
+    ).size
 
-// 导出 API
+    // 生成总结
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData?.user?.id
+
+    const avgAccuracy = reports?.length > 0
+      ? Math.round(reports.reduce((a, r) => a + (r.accuracy || 0), 0) / reports.length)
+      : 0
+
+    const detailText = `今日共${totalStudents || 0}名学生，${completedStudents}人完成作业。`
+
+    const copyText = `【今日学习总结 ${date}】
+
+👥 学生情况：
+在册 ${totalStudents || 0} 人，完成作业 ${completedStudents} 人
+
+📊 各科完成情况：
+${Object.values(subjectStats).map(s => `${s.name}：${s.completed}/${s.total}`).join('\n')}
+
+💡 ${detailText}`
+
+    const { data, error } = await supabase
+      .from('daily_summaries')
+      .upsert({
+        user_id: userId,
+        summary_date: date,
+        total_students: totalStudents || 0,
+        completed_count: completedStudents,
+        avg_accuracy: avgAccuracy,
+        subject_summary: Object.values(subjectStats),
+        detail_text: detailText,
+        copy_text: copyText
+      }, { onConflict: 'user_id,summary_date' })
+      .select()
+      .single()
+
+    if (error) throw error
+    return { summary: data, copy_text: copyText }
+  }
+}
+
+// 导出 api 对象（兼容原有代码）
 window.api = {
   students: studentsAPI,
   subjects: subjectsAPI,
   plans: plansAPI,
   reports: reportsAPI,
-  summaries: summariesAPI,
-  upload: uploadAPI
-};
+  summaries: summariesAPI
+}

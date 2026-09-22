@@ -92,6 +92,46 @@ window.studentsAPI = {
   }
 }
 
+// 学情评估相关 API
+window.assessmentsAPI = {
+  // 拉取某学生的全部历次评估（含科目信息）
+  async listByStudent(studentId) {
+    const result = await supabaseClient
+      .from('subject_assessments')
+      .select(`
+        *,
+        subject:subjects(id, name, icon)
+      `)
+      .eq('student_id', studentId)
+      .order('assess_date', { ascending: true })
+
+    if (result.error) throw result.error
+    return { assessments: result.data }
+  },
+
+  async create(data) {
+    const userResult = await supabaseClient.auth.getUser()
+    const result = await supabaseClient
+      .from('subject_assessments')
+      .insert({ ...data, created_by: userResult.data?.user?.id })
+      .select()
+      .single()
+
+    if (result.error) throw result.error
+    return { assessment: result.data }
+  },
+
+  async delete(id) {
+    const result = await supabaseClient
+      .from('subject_assessments')
+      .delete()
+      .eq('id', id)
+
+    if (result.error) throw result.error
+    return { success: true }
+  }
+}
+
 // 科目相关 API
 window.subjectsAPI = {
   async list() {

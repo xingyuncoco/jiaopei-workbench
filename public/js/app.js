@@ -3,7 +3,7 @@
  * 全局 API（从 window 读取）
  */
 
-const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI } = window;
+const { studentsAPI, subjectsAPI, plansAPI, reportsAPI, summariesAPI, assessmentsAPI } = window;
 
 // 全局状态
 const state = {
@@ -12,12 +12,13 @@ const state = {
   plans: [],
   currentDate: new Date().toISOString().split('T')[0],
   selectedStudentId: null,
-  selectedSubjectId: null
+  selectedSubjectId: null,
+  currentStudentId: null
 };
 
 // 路由控制
 const router = {
-  pages: ['home', 'students', 'plans', 'subjects', 'correct', 'summary'],
+  pages: ['home', 'students', 'plans', 'subjects', 'correct', 'summary', 'profile'],
 
   navigate(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -37,6 +38,7 @@ const router = {
     if (page === 'plans') initPlansPage();
     if (page === 'correct') initCorrectPage();
     if (page === 'summary') initSummaryPage();
+    if (page === 'profile') initProfilePage();
 
     window.scrollTo(0, 0);
   }
@@ -277,17 +279,17 @@ async function loadStudents() {
   let html = '';
   state.students.forEach(student => {
     html += `
-      <div class="list-item">
+      <div class="list-item" onclick="profile.open('${student.id}')">
         <div class="list-item-info">
-          <div class="list-item-avatar">👨‍🎓</div>
+          <div class="list-item-avatar">🎓</div>
           <div>
             <div class="list-item-name">${student.name}</div>
             <div class="list-item-desc">${student.grade || ''} ${student.group_name || ''}</div>
           </div>
         </div>
         <div class="list-item-actions">
-          <button class="list-item-btn" onclick="students.showEditModal('${student.id}')">✏️</button>
-          <button class="list-item-btn" onclick="students.confirmDelete('${student.id}')">🗑️</button>
+          <button class="list-item-btn" onclick="event.stopPropagation(); students.showEditModal('${student.id}')">✏️</button>
+          <button class="list-item-btn" onclick="event.stopPropagation(); students.confirmDelete('${student.id}')">🗑️</button>
         </div>
       </div>
     `;
@@ -311,6 +313,10 @@ const students = {
         <div class="form-item">
           <label>家长群名称</label>
           <input type="text" id="studentGroup" placeholder="如：XX妈妈群">
+        </div>
+        <div class="form-item">
+          <label>入学日期</label>
+          <input type="date" id="studentEnrolledAt">
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
@@ -338,6 +344,10 @@ const students = {
           <label>家长群名称</label>
           <input type="text" id="studentGroup" value="${student.group_name || ''}">
         </div>
+        <div class="form-item">
+          <label>入学日期</label>
+          <input type="date" id="studentEnrolledAt" value="${student.enrolled_at || ''}">
+        </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="modal.close()">取消</button>
           <button class="btn btn-primary" onclick="students.save('${id}')">保存</button>
@@ -350,6 +360,8 @@ const students = {
     const name = document.getElementById('studentName').value.trim();
     const grade = document.getElementById('studentGrade').value.trim();
     const group_name = document.getElementById('studentGroup').value.trim();
+    // 空字符串会被 Postgres 判为非法日期，必须转成 null
+    const enrolled_at = document.getElementById('studentEnrolledAt').value || null;
 
     if (!name) {
       toast.error('请输入学生姓名');
@@ -360,10 +372,10 @@ const students = {
 
     try {
       if (id) {
-        await studentsAPI.update(id, { name, grade, group_name });
+        await studentsAPI.update(id, { name, grade, group_name, enrolled_at });
         toast.success('修改成功');
       } else {
-        await studentsAPI.create({ name, grade, group_name });
+        await studentsAPI.create({ name, grade, group_name, enrolled_at });
         toast.success('添加成功');
       }
 
@@ -976,6 +988,240 @@ const summary = {
   }
 };
 
+// ========== 学生学情档案 ==========
+const LEVEL_LABELS = ['', '入门', '较弱', '中等', '良好', '优秀'];
+const ASSESS_TYPES = {
+  enroll: '入学基线',
+  daily: '日常',
+  midterm: '期中',
+  final: '期末'
+};
+
+// 把评估记录按科目归组，算出「入学基线 vs 最新」
+function buildSubjectComparison(subjects, assessments) {
+  const bySubject = new Map();
+  assessments.forEach(item => {
+    if (!bySubject.has(item.subject_id)) bySubject.set(item.subject_id, []);
+    bySubject.get(item.subject_id).push(item);
+  });
+
+  return subjects.map(subject => {
+    const history = bySubject.get(subject.id) || [];
+    const baseline = history.find(a => a.assess_type === 'enroll') || history[0] || null;
+    const latest = history[history.length - 1] || null;
+    const delta = baseline && latest ? latest.level - baseline.level : null;
+
+    return {
+      subject,
+      history,
+      baseline,
+      latest,
+      delta,
+      assessed: history.length > 0,
+      // 薄弱：最新水平 <= 2 级
+      isWeak: !!latest && latest.level <= 2
+    };
+  });
+}
+
+function renderLevelDots(level) {
+  if (!level) return '<span class="level-none">未评估</span>';
+  const dots = Array.from({ length: 5 }, (_, i) =>
+    `<span class="dot ${i < level ? 'on' : ''}"></span>`).join('');
+  return `<span class="level-dots">${dots}</span><span class="level-text">${LEVEL_LABELS[level]}</span>`;
+}
+
+function renderDelta(delta) {
+  if (delta === null || delta === undefined) return '';
+  if (delta > 0) return `<span class="delta up">↑ +${delta}</span>`;
+  if (delta < 0) return `<span class="delta down">↓ ${delta}</span>`;
+  return '<span class="delta flat">— 持平</span>';
+}
+
+const profile = {
+  open(studentId) {
+    state.currentStudentId = studentId;
+    router.navigate('profile');
+  },
+
+  async load() {
+    if (!state.currentStudentId) return null;
+    const student = state.students.find(s => s.id === state.currentStudentId);
+    if (!student) return null;
+
+    const { assessments } = await assessmentsAPI.listByStudent(student.id);
+    return { student, comparison: buildSubjectComparison(state.subjects, assessments) };
+  },
+
+  async render() {
+    const container = document.getElementById('profileContent');
+    const data = await this.load();
+
+    if (!data) {
+      container.innerHTML = '<div class="empty-state"><p class="empty-state-text">学生不存在，请返回重试</p></div>';
+      return;
+    }
+
+    const { student, comparison } = data;
+    const weakList = comparison.filter(c => c.isWeak);
+
+    let html = `
+      <div class="profile-card">
+        <div class="profile-name">${student.name}</div>
+        <div class="profile-meta">
+          <span>${student.grade || '未填年级'}</span>
+          <span>入学：${student.enrolled_at || '未填'}</span>
+        </div>
+        ${weakList.length ? `<div class="profile-weak">⚠️ 薄弱科目：${weakList.map(c => c.subject.name).join('、')}</div>` : ''}
+      </div>
+
+      <div class="profile-section-head">
+        <h3>各科水平对比</h3>
+        <button class="btn btn-primary btn-sm" onclick="profile.showAddModal()">＋ 记录学情</button>
+      </div>
+      <div class="assess-table">
+        <div class="assess-row assess-row-head">
+          <span>科目</span><span>入学</span><span>现在</span><span>变化</span>
+        </div>
+    `;
+
+    comparison.forEach(row => {
+      html += `
+        <div class="assess-row">
+          <span class="assess-subject">${row.subject.icon || ''} ${row.subject.name}${row.isWeak ? ' <em class="weak-tag">薄弱</em>' : ''}</span>
+          <span>${renderLevelDots(row.baseline?.level)}</span>
+          <span>${renderLevelDots(row.latest?.level)}</span>
+          <span>${renderDelta(row.delta)}</span>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+
+    // 历次记录（按时间倒序）
+    const allHistory = comparison.flatMap(c => c.history).sort((a, b) => b.assess_date.localeCompare(a.assess_date));
+    html += `<div class="profile-section-head"><h3>评估记录（${allHistory.length}）</h3></div>`;
+
+    if (allHistory.length === 0) {
+      html += '<div class="empty-state"><p class="empty-state-text">还没有学情记录，点击上方「记录学情」录入入学基线</p></div>';
+    } else {
+      html += '<div class="history-list">';
+      allHistory.forEach(item => {
+        html += `
+          <div class="history-item">
+            <div class="history-main">
+              <div class="history-title">
+                ${item.subject?.icon || ''} ${item.subject?.name || '已删除科目'}
+                <em class="type-tag ${item.assess_type}">${ASSESS_TYPES[item.assess_type] || item.assess_type}</em>
+              </div>
+              <div class="history-sub">${item.assess_date} · ${LEVEL_LABELS[item.level]}</div>
+              ${item.weak_points ? `<div class="history-weak">薄弱点：${item.weak_points}</div>` : ''}
+              ${item.note ? `<div class="history-note">${item.note}</div>` : ''}
+            </div>
+            <button class="list-item-btn" onclick="profile.remove('${item.id}')">🗑️</button>
+          </div>
+        `;
+      });
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  },
+
+  showAddModal() {
+    const subjectOptions = state.subjects
+      .map(s => `<option value="${s.id}">${s.icon || ''} ${s.name}</option>`).join('');
+    const levelOptions = LEVEL_LABELS.slice(1)
+      .map((label, i) => `<option value="${i + 1}">${i + 1} 级 · ${label}</option>`).join('');
+
+    modal.show('记录学情', `
+      <div class="modal-form">
+        <div class="form-item">
+          <label>科目 *</label>
+          <select id="assessSubject">${subjectOptions}</select>
+        </div>
+        <div class="form-item">
+          <label>评估类型 *</label>
+          <select id="assessType">
+            <option value="enroll">入学基线</option>
+            <option value="daily" selected>日常</option>
+            <option value="midterm">期中</option>
+            <option value="final">期末</option>
+          </select>
+        </div>
+        <div class="form-item">
+          <label>评估日期 *</label>
+          <input type="date" id="assessDate" value="${formatFullDate(new Date().toISOString())}">
+        </div>
+        <div class="form-item">
+          <label>水平等级 *</label>
+          <select id="assessLevel">${levelOptions}</select>
+        </div>
+        <div class="form-item">
+          <label>薄弱点</label>
+          <textarea id="assessWeak" rows="2" placeholder="如：分数应用题会做，单位换算常错"></textarea>
+        </div>
+        <div class="form-item">
+          <label>备注</label>
+          <textarea id="assessNote" rows="2" placeholder="选填"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="modal.close()">取消</button>
+          <button class="btn btn-primary" onclick="profile.save()">保存</button>
+        </div>
+      </div>
+    `);
+  },
+
+  async save() {
+    const payload = {
+      student_id: state.currentStudentId,
+      subject_id: document.getElementById('assessSubject').value,
+      assess_type: document.getElementById('assessType').value,
+      assess_date: document.getElementById('assessDate').value,
+      level: Number(document.getElementById('assessLevel').value),
+      weak_points: document.getElementById('assessWeak').value.trim() || null,
+      note: document.getElementById('assessNote').value.trim() || null
+    };
+
+    if (!payload.subject_id || !payload.assess_date) {
+      toast.error('请选择科目和日期');
+      return;
+    }
+
+    loading.show('保存中...');
+    try {
+      await assessmentsAPI.create(payload);
+      modal.close();
+      toast.success('已记录');
+      await this.render();
+    } catch (error) {
+      console.error('保存学情失败:', error);
+      // 唯一索引冲突：同科目同日同类型已存在
+      toast.error(error.code === '23505' ? '该科目当天已有同类型记录' : error.message);
+    } finally {
+      loading.hide();
+    }
+  },
+
+  async remove(id) {
+    if (!confirm('确定删除这条学情记录吗？')) return;
+    loading.show('删除中...');
+    try {
+      await assessmentsAPI.delete(id);
+      await this.render();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
+  }
+};
+
+async function initProfilePage() {
+  await profile.render();
+}
+
 // 应用启动
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('loginForm').addEventListener('submit', handleLogin);
@@ -987,6 +1233,7 @@ window.router = router;
 window.modal = modal;
 window.toast = toast;
 window.students = students;
+window.profile = profile;
 window.plans = plans;
 window.subjects = subjects;
 window.correct = correct;

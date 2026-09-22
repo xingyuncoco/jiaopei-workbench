@@ -816,11 +816,18 @@ html, body {
 }
 
 .form-item input,
-.form-item select {
+.form-item select,
+.form-item textarea {
   padding: 12px;
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-sm);
   font-size: 16px;
+}
+
+.form-item textarea {
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .icon-picker {
@@ -1035,4 +1042,195 @@ html, body {
   border: 1px solid var(--primary-light);
   border-radius: 8px;
   cursor: pointer;
+}
+
+/* ========== 学情档案 ========== */
+.list-item {
+  cursor: pointer;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.profile-card {
+  background: var(--white);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.profile-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.profile-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+.profile-weak {
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--danger);
+  background: #FEF2F2;
+  border-radius: 8px;
+}
+
+.profile-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 10px;
+}
+
+.profile-section-head h3 {
+  font-size: 15px;
+  color: var(--gray-800);
+}
+
+.assess-table {
+  background: var(--white);
+  border-radius: 14px;
+  padding: 4px 12px;
+  box-shadow: var(--shadow);
+}
+
+.assess-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1.4fr 1.4fr 0.8fr;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 13px;
+}
+
+.assess-row:last-child {
+  border-bottom: none;
+}
+
+.assess-row-head {
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+.assess-subject {
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.level-dots {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-200);
+}
+
+.dot.on {
+  background: var(--primary);
+}
+
+.level-text {
+  margin-left: 5px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.level-none {
+  font-size: 12px;
+  color: var(--gray-300);
+}
+
+.delta {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.delta.up { color: var(--success); }
+.delta.down { color: var(--danger); }
+.delta.flat { color: var(--gray-400); }
+
+.weak-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 4px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--danger);
+  background: #FEF2F2;
+  border-radius: 4px;
+}
+
+.type-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 4px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  border-radius: 4px;
+}
+
+.type-tag.enroll {
+  color: var(--primary);
+  background: #EEF2FF;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--white);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.history-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.history-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+.history-weak {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--warning);
+}
+
+.history-note {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--gray-500);
 }

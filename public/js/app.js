@@ -1456,6 +1456,10 @@ const summary = {
   },
 
   // === 板块一：作业情况（按学生 + 当天批改明细） ===
+  /**
+   * 生成作业情况报告（纯数据拼接，不调用 AI）
+   * 统计各科作业的对错空、正确率，整合薄弱点
+   */
   async generateHomework() {
     const studentId = document.getElementById('homeworkStudent').value;
     if (!studentId) { toast.error('请先选择学生'); return; }
@@ -1464,36 +1468,36 @@ const summary = {
 
     loading.show('生成中...');
     try {
-      const token = await authAPI.getAccessToken();
-      if (!token) { toast.error('登录已失效'); return; }
-
-      const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
       const subjectMap = Object.fromEntries(state.subjects.map(s => [s.id, s]));
       const { reports } = await reportsAPI.list({ date: state.currentDate, student_id: studentId });
       const mergedSubjects = this._mergeReportsBySubject(reports || [], subjectMap);
 
-      const payload = {
-        mode: 'homework',
-        date: state.currentDate,
-        student_name: student.name,
-        grade: student.grade,
-        subjects: mergedSubjects
-      };
-      const resp = await fetch('/api/homework-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload)
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
+      if (mergedSubjects.length === 0) {
+        toast.error('该学生今天还没有批改记录');
+        return;
+      }
 
-      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      // 统计整体情况
+      const totalQuestions = mergedSubjects.reduce((sum, s) => sum + s.total, 0);
+      const totalCorrect = mergedSubjects.reduce((sum, s) => sum + s.correct, 0);
+      const overallAccuracy = totalQuestions > 0 ? Math.round(totalCorrect / totalQuestions * 100) : 0;
+
+      // 收集所有薄弱点
+      const allWeakPoints = mergedSubjects
+        .filter(s => s.weak_points && s.weak_points.length > 0)
+        .flatMap(s => s.weak_points);
+
+      // 生成报告文本
+      const summaryText = this._buildHomeworkReportText(student, mergedSubjects, totalQuestions, totalCorrect, overallAccuracy, allWeakPoints);
+
+      // 显示报告
+      const safe = summaryText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       document.getElementById('summaryContent').innerHTML = `
         <div class="ai-summary-box">
           <div class="ai-summary-meta">${student.name} · ${formatDate(state.currentDate)}</div>
           <pre class="ai-summary-text">${safe}</pre>
         </div>`;
-      document.getElementById('summaryContent').dataset.copyText = data.summary;
+      document.getElementById('summaryContent').dataset.copyText = summaryText;
       document.getElementById('summaryActions').style.display = 'flex';
 
       // 写入历史
@@ -1502,8 +1506,17 @@ const summary = {
         student_id: studentId,
         period_start: state.currentDate,
         period_end: state.currentDate,
-        content: data.summary,
-        payload
+        content: summaryText,
+        payload: {
+          mode: 'homework',
+          date: state.currentDate,
+          student_name: student.name,
+          grade: student.grade,
+          subjects: mergedSubjects,
+          total_questions: totalQuestions,
+          total_correct: totalCorrect,
+          overall_accuracy: overallAccuracy
+        }
       });
       await this.loadHistory('homework', studentId);
       toast.success('报告已生成');
@@ -1513,6 +1526,47 @@ const summary = {
     } finally {
       loading.hide();
     }
+  },
+
+  /**
+   * 构建作业情况报告文本
+   * @param {Object} student - 学生信息
+   * @param {Array} subjects - 各科合并后的数据
+   * @param {number} totalQuestions - 总题数
+   * @param {number} totalCorrect - 总正确数
+   * @param {number} overallAccuracy - 整体正确率
+   * @param {Array} allWeakPoints - 所有薄弱点
+   * @returns {string} 报告文本
+   */
+  _buildHomeworkReportText(student, subjects, totalQuestions, totalCorrect, overallAccuracy, allWeakPoints) {
+    const grade = student.grade ? `（${student.grade}）` : '';
+    const dateStr = formatDate(state.currentDate);
+
+    // 各科详情（按传入顺序排列，保证结果稳定）
+    const subjectDetails = subjects.map(s => {
+      const weak = s.weak_points.length > 0 ? `薄弱点：${s.weak_points.join('、')}` : '无明显薄弱点';
+      return `${s.icon || ''} ${s.subject}：${s.total}题，对${s.correct}错${s.wrong}空${s.blank}，正确率${s.accuracy}%${s.weak_points.length > 0 ? '，' + weak : ''}`;
+    }).join('\n');
+
+    // 薄弱点整合建议（去重并排序，保证顺序稳定）
+    let suggestion = '';
+    if (allWeakPoints.length > 0) {
+      const uniqueWeak = [...new Set(allWeakPoints)].sort();  // 排序保证顺序一致
+      suggestion = `建议加强练习：${uniqueWeak.join('、')}。`;
+    } else {
+      suggestion = '各科掌握情况良好，继续保持。';
+    }
+
+    return [
+      `${student.name}${grade} ${dateStr} 作业情况`,
+      '',
+      `今日共完成 ${totalQuestions} 题，整体正确率 ${overallAccuracy}%。`,
+      '',
+      '【各科情况】',
+      subjectDetails,
+      '',
+      suggestion
+    ].join('\n');
   },
 
   regenerate() { return this.generateHomework(); },

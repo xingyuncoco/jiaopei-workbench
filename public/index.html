@@ -32,9 +32,9 @@
   <div id="app" style="display:none">
     <!-- 顶部导航 -->
     <header class="header">
-      <h1 class="header-title">教培工作台</h1>
+      <h1 class="header-title">理想树教培工作台</h1>
       <div class="header-user" id="userInfo">
-        <span id="userName" class="user-name"></span>
+        <span id="userName" class="user-name" onclick="showSettingsModal()" style="cursor:pointer" title="点击修改设置"></span>
         <button class="logout-btn" onclick="handleLogout()">退出</button>
       </div>
     </header>
@@ -44,7 +44,7 @@
       <!-- 首页 -->
       <section id="homePage" class="page active">
         <div class="welcome-card">
-          <h2>你好，老师！</h2>
+          <h2>你好，<span id="welcomeUserName"></span>老师！</h2>
           <p id="todayDate"></p>
         </div>
 
@@ -324,7 +324,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/api.js?v=3"></script>
-  <script src="js/app.js?v=4"></script>
+  <script src="js/api.js?v=4"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

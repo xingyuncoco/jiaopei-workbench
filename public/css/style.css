@@ -1335,8 +1335,9 @@ html, body {
 
 /* 顶部用户名与退出 */
 .user-name {
-  font-size: 13px;
-  color: var(--gray-600);
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
   max-width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1346,11 +1347,16 @@ html, body {
 .logout-btn {
   padding: 5px 12px;
   font-size: 13px;
-  color: var(--primary);
-  background: transparent;
-  border: 1px solid var(--primary-light);
+  color: #fff;
+  background: var(--primary);
+  border: none;
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.2s;
+}
+
+.logout-btn:hover {
+  background: var(--primary-dark, #4338ca);
 }
 
 /* ========== 学情档案 ========== */

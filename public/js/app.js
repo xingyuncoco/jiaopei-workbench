@@ -127,7 +127,19 @@ async function enterApp(user) {
   document.getElementById('loginPage').querySelector('form').reset();
   document.getElementById('app').style.display = '';
 
-  document.getElementById('userName').textContent = (user.email || '').split('@')[0];
+  // 获取或创建用户配置（包含自定义显示名）
+  let displayName = (user.email || '').split('@')[0];  // 默认使用邮箱前缀
+  try {
+    const { profile } = await userProfilesAPI.getOrCreateProfile();
+    if (profile && profile.display_name) {
+      displayName = profile.display_name;
+    }
+  } catch (e) {
+    console.warn('获取用户配置失败，使用默认显示名:', e);
+  }
+
+  document.getElementById('userName').textContent = displayName;
+  document.getElementById('welcomeUserName').textContent = displayName;
 
   const today = new Date();
   document.getElementById('todayDate').textContent =
@@ -172,6 +184,48 @@ async function handleLogout() {
   state.subjects = [];
   state.plans = [];
   showLogin();
+}
+
+// 显示设置弹窗
+async function showSettingsModal() {
+  const currentName = document.getElementById('userName').textContent;
+  modal.show('⚙️ 个人设置', `
+    <div class="modal-form">
+      <div class="form-item">
+        <label>显示名称</label>
+        <input type="text" id="settingsDisplayName" value="${currentName}" placeholder="输入你的显示名称" maxlength="20">
+        <small style="color:#666;font-size:12px;">这个名称会显示在欢迎语中，如：张老师</small>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="modal.close()">取消</button>
+        <button class="btn btn-primary" onclick="saveDisplayName()">保存</button>
+      </div>
+    </div>
+  `);
+}
+
+// 保存显示名称
+async function saveDisplayName() {
+  const displayName = document.getElementById('settingsDisplayName').value.trim();
+  if (!displayName) {
+    toast.error('显示名称不能为空');
+    return;
+  }
+  if (displayName.length > 20) {
+    toast.error('显示名称不能超过20个字符');
+    return;
+  }
+
+  try {
+    await userProfilesAPI.updateDisplayName(displayName);
+    document.getElementById('userName').textContent = displayName;
+    document.getElementById('welcomeUserName').textContent = displayName;
+    modal.close();
+    toast.success('显示名称已保存');
+  } catch (error) {
+    console.error('保存显示名称失败:', error);
+    toast.error('保存失败：' + (error.message || '请重试'));
+  }
 }
 
 // 标准科目清单（初中九科）

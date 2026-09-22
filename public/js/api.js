@@ -60,6 +60,71 @@ window.authAPI = {
   }
 }
 
+// 用户配置 API（存储自定义显示名等）
+window.userProfilesAPI = {
+  // 获取当前用户的配置
+  async getMyProfile() {
+    const userResult = await supabaseClient.auth.getUser()
+    const userId = userResult.data?.user?.id
+    if (!userId) return { profile: null }
+
+    const result = await supabaseClient
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (result.error) throw result.error
+    return { profile: result.data }
+  },
+
+  // 获取或创建用户配置（首次登录时自动创建）
+  async getOrCreateProfile() {
+    const userResult = await supabaseClient.auth.getUser()
+    const userId = userResult.data?.user?.id
+    if (!userId) return { profile: null }
+
+    // 先尝试获取
+    const existing = await supabaseClient
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (existing.data) {
+      return { profile: existing.data }
+    }
+
+    // 不存在则创建（使用邮箱前缀作为默认显示名）
+    const emailPrefix = (userResult.data.user.email || '').split('@')[0]
+    const result = await supabaseClient
+      .from('user_profiles')
+      .insert({ user_id: userId, display_name: emailPrefix })
+      .select()
+      .single()
+
+    if (result.error) throw result.error
+    return { profile: result.data }
+  },
+
+  // 更新显示名
+  async updateDisplayName(displayName) {
+    const userResult = await supabaseClient.auth.getUser()
+    const userId = userResult.data?.user?.id
+    if (!userId) throw new Error('未登录')
+
+    const result = await supabaseClient
+      .from('user_profiles')
+      .update({ display_name: displayName, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .select()
+      .single()
+
+    if (result.error) throw result.error
+    return { profile: result.data }
+  }
+}
+
 // 学生相关 API
 window.studentsAPI = {
   async list() {

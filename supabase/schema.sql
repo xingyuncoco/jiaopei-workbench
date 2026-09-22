@@ -99,6 +99,17 @@ CREATE TABLE IF NOT EXISTS summary_history (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 7. 创建 user_profiles 表（用户配置）
+-- 存储用户的自定义显示名称等配置信息
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name    TEXT,  -- 自定义显示名称（中文名）
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
 -- =============================================
 -- 启用 RLS (行级安全策略)
 -- =============================================
@@ -109,6 +120,7 @@ ALTER TABLE homework_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE homework_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_summaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE summary_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- =============================================
 -- RLS 策略：每个用户只能访问自己的数据
@@ -144,6 +156,10 @@ CREATE POLICY "teachers_delete_all" ON summary_history
 CREATE POLICY "teachers_update_all" ON summary_history
     FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
+-- user_profiles 策略（用户只能管理自己的配置）
+CREATE POLICY "users_manage_own_profile" ON user_profiles
+    FOR ALL USING (auth.uid() = user_id);
+
 -- =============================================
 -- 创建索引优化查询性能
 -- =============================================
@@ -160,3 +176,6 @@ CREATE INDEX IF NOT EXISTS idx_summaries_user_date ON daily_summaries(user_id, s
 CREATE INDEX IF NOT EXISTS idx_summary_kind_student_time ON summary_history(kind, student_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_summary_kind_period ON summary_history(kind, student_id, period_end DESC);
 CREATE INDEX IF NOT EXISTS idx_summary_created_at ON summary_history(created_at);
+
+-- user_profiles 表索引
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);

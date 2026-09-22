@@ -527,6 +527,18 @@ window.reportsAPI = {
 
     if (result.error) throw result.error
     return { success: true }
+  },
+
+  // 新建一条批改记录（与多张照片表 homework_report_photos 配套）
+  async create(payload) {
+    const result = await supabaseClient
+      .from('homework_reports')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (result.error) throw result.error
+    return { report: result.data }
   }
 }
 

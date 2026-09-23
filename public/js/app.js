@@ -1200,11 +1200,11 @@ const correct = {
       for (let i = 0; i < this.photos.length; i++) {
         const photo = this.photos[i];
         const r = this.results[i] || {};
-        const total = r.total || 0;
-        const correct = r.correct || 0;
-        const wrong = r.wrong || 0;
-        const blank = r.blank || 0;
-        const accuracy = total > 0 ? Math.round(correct / total * 100) : 0;
+        const total_count = r.total_count || r.total || 0;
+        const correct_count = r.correct_count || r.correct || 0;
+        const wrong_count = r.wrong_count || r.wrong || 0;
+        const empty_count = r.empty_count || r.empty || r.blank || 0;
+        const accuracy = total_count > 0 ? Math.round(correct_count / total_count * 100) : 0;
 
         await reportsAPI.create({
           student_id: studentId,
@@ -1212,12 +1212,12 @@ const correct = {
           plan_date: state.currentDate,
           plan_id: planId,
           accuracy,
-          total_questions: total,
-          correct_count: correct,
-          wrong_count: wrong,
-          blank_count: blank,
-          weak_points: (r.weak_points || []).join('；') || null,
-          overall_advice: r.advice || null,
+          total_count,
+          correct_count,
+          wrong_count,
+          empty_count,
+          weak_points: r.weak_points || [],
+          suggestion: r.suggestion || r.advice || null,
           batch_id: batchId,
           user_id: userId
         });
@@ -1526,18 +1526,26 @@ const summary = {
         map[subjName] = {
           subject: subjName,
           icon: r.subject?.icon || subjectMap[r.subject_id]?.icon || '',
-          total: 0, correct: 0, wrong: 0, blank: 0,
-          weakSet: new Set(), advices: [], count: 0
+          total: 0, correct: 0, wrong: 0, empty: 0,
+          weakSet: new Set(), suggestions: [], count: 0
         };
       }
       const m = map[subjName];
-      m.total   += r.total_questions || 0;
-      m.correct += r.correct_count   || 0;
-      m.wrong   += r.wrong_count     || 0;
-      m.blank   += r.blank_count     || 0;
+      m.total   += r.total_count || r.total_questions || 0;
+      m.correct += r.correct_count || 0;
+      m.wrong   += r.wrong_count || 0;
+      m.empty   += r.empty_count || r.blank_count || 0;
       m.count   += 1;
-      (r.weak_points || '').split(/[；;]/).map(s => s.trim()).filter(Boolean).forEach(w => m.weakSet.add(w));
-      if (r.overall_advice) m.advices.push(r.overall_advice);
+      // weak_points 可能是数组或字符串
+      const weakPoints = r.weak_points;
+      if (Array.isArray(weakPoints)) {
+        weakPoints.forEach(w => m.weakSet.add(w));
+      } else if (typeof weakPoints === 'string' && weakPoints) {
+        weakPoints.split(/[；;]/).map(s => s.trim()).filter(Boolean).forEach(w => m.weakSet.add(w));
+      }
+      if (r.suggestion || r.overall_advice || r.advice) {
+        m.suggestions.push(r.suggestion || r.overall_advice || r.advice);
+      }
     });
     return Object.values(map).map(m => ({
       subject: m.subject,
@@ -1545,10 +1553,10 @@ const summary = {
       total: m.total,
       correct: m.correct,
       wrong: m.wrong,
-      blank: m.blank,
+      blank: m.empty,
       accuracy: m.total > 0 ? Math.round(m.correct / m.total * 100) : 0,
       weak_points: [...m.weakSet],
-      advice: m.advices.join('；'),
+      advice: m.suggestions.join('；'),
       count: m.count
     }));
   },

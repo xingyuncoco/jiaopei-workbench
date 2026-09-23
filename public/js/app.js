@@ -1146,63 +1146,29 @@ const correct = {
     const container = document.getElementById('correctResult');
     container.style.display = 'block';
 
-    let totalQ = 0, correct = 0, wrong = 0, blank = 0;
+    let totalQ = 0, correct = 0, wrong = 0, empty = 0;
     this.results.forEach(r => {
-      totalQ += r.total || 0;
-      correct += r.correct || 0;
-      wrong  += r.wrong  || 0;
-      blank  += r.blank  || 0;
+      totalQ += r.total_count || r.total || 0;
+      correct += r.correct_count || r.correct || 0;
+      wrong  += r.wrong_count || r.wrong || 0;
+      empty  += r.empty_count || r.empty || 0;
     });
     const accuracy = totalQ > 0 ? Math.round(correct / totalQ * 100) : 0;
 
     const weakSet = new Set();
     this.results.forEach(r => (r.weak_points || []).forEach(w => weakSet.add(w)));
-    const advices = this.results.map(r => r.advice).filter(Boolean);
-
-    const pagesHtml = this.results.map((r, i) => {
-      const qHtml = (r.questions || []).map(q => {
-        const cls = q.status === 'correct' ? 'q-correct' :
-                    q.status === 'wrong'   ? 'q-wrong'   : 'q-blank';
-        const label = q.status === 'correct' ? '✅' : q.status === 'wrong' ? '❌' : '⬜';
-        const reason = q.wrong_reason ? `<div class="q-meta">错因：${q.wrong_reason}</div>` : '';
-        const process = q.process ? `<div class="q-meta">思路：${q.process}</div>` : '';
-        return `
-          <div class="q-item ${cls}">
-            <div><strong>${label} 第 ${q.index} 题</strong> · ${q.student_answer || '（未答）'}</div>
-            ${q.correct_answer ? `<div class="q-meta">标准：${q.correct_answer}</div>` : ''}
-            ${process}
-            ${reason}
-          </div>`;
-      }).join('');
-      return `
-        <div class="grade-page">
-          <div class="grade-page-head">
-            <strong>📷 第 ${i + 1} 页</strong>
-            <span>共 ${r.total || 0} 题，对 ${r.correct || 0} / 错 ${r.wrong || 0} / 未答 ${r.blank || 0}</span>
-          </div>
-          <div class="grade-questions">${qHtml || '<p class="empty-tip">未识别到题目</p>'}</div>
-          ${r.advice ? `<div class="grade-advice">💡 ${r.advice}</div>` : ''}
-        </div>`;
-    }).join('');
-
-    const weakHtml = [...weakSet].length
-      ? `<div class="grade-weak"><h4>📊 本次薄弱点</h4><ul>${[...weakSet].map(w => `<li>${w}</li>`).join('')}</ul></div>`
-      : '';
-    const teacherHtml = advices.length
-      ? `<div class="grade-teacher"><h4>🎓 给老师的建议</h4><ul>${advices.map(a => `<li>${a}</li>`).join('')}</ul></div>`
-      : '';
+    const suggestions = this.results.map(r => r.suggestion || r.advice).filter(Boolean);
 
     container.innerHTML = `
       <div class="grade-summary">
         <div class="grade-stat"><div class="grade-stat-val">${totalQ}</div><div class="grade-stat-lbl">总题数</div></div>
         <div class="grade-stat"><div class="grade-stat-val">${correct}</div><div class="grade-stat-lbl">做对</div></div>
         <div class="grade-stat"><div class="grade-stat-val">${wrong}</div><div class="grade-stat-lbl">做错</div></div>
-        <div class="grade-stat"><div class="grade-stat-val">${blank}</div><div class="grade-stat-lbl">未答</div></div>
+        <div class="grade-stat"><div class="grade-stat-val">${empty}</div><div class="grade-stat-lbl">未答</div></div>
         <div class="grade-stat grade-stat-acc"><div class="grade-stat-val">${accuracy}%</div><div class="grade-stat-lbl">准确率</div></div>
       </div>
-      ${weakHtml}
-      ${teacherHtml}
-      <div class="grade-pages">${pagesHtml}</div>
+      ${[...weakSet].length ? `<div class="grade-weak"><h4>📊 本次薄弱点</h4><ul>${[...weakSet].map(w => `<li>${w}</li>`).join('')}</ul></div>` : ''}
+      ${suggestions.length ? `<div class="grade-teacher"><h4>🎓 建议</h4><ul>${suggestions.map(a => `<li>${a}</li>`).join('')}</ul></div>` : ''}
     `;
   },
 

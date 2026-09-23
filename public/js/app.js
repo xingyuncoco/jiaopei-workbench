@@ -1419,38 +1419,51 @@ const summary = {
     const student = state.students.find(s => s.id === studentId);
     if (!student) return;
 
-    loading.show('生成中...');
+    loading.show('加载中...');
     try {
-      const token = await authAPI.getAccessToken();
-      if (!token) { toast.error('登录已失效'); return; }
-
-      const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
       const subjectMap = Object.fromEntries(state.subjects.map(s => [s.id, s]));
       const { reports } = await reportsAPI.list({ date: state.currentDate, student_id: studentId });
-      const mergedSubjects = this._mergeReportsBySubject(reports || [], subjectMap);
 
-      const payload = {
-        mode: 'homework',
-        date: state.currentDate,
-        student_name: student.name,
-        grade: student.grade,
-        subjects: mergedSubjects
-      };
-      const resp = await fetch('/api/homework-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload)
+      if (!reports || reports.length === 0) {
+        document.getElementById('summaryContent').innerHTML = '<p class="empty-tip">今日暂无批改记录</p>';
+        document.getElementById('summaryActions').style.display = 'none';
+        return;
+      }
+
+      const mergedSubjects = this._mergeReportsBySubject(reports, subjectMap);
+
+      // 直接拼接文本，不需要 AI 生成
+      let summaryText = `【${student.name} 今日作业情况】${state.currentDate}\n\n`;
+      mergedSubjects.forEach(sub => {
+        summaryText += `${sub.icon || '📝'} ${sub.subject}：共${sub.total}题，对${sub.correct}，错${sub.wrong}，空${sub.blank}，准确率${sub.accuracy}%\n`;
+        if (sub.weak_points && sub.weak_points.length > 0) {
+          summaryText += `  薄弱点：${sub.weak_points.join('、')}\n`;
+        }
+        if (sub.advice) {
+          summaryText += `  建议：${sub.advice}\n`;
+        }
+        summaryText += '\n';
       });
-      const data = await resp.json();
-      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
 
-      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      // 生成可复制文本（纯文本格式）
+      let copyText = `【${student.name} 今日作业情况】${state.currentDate}\n`;
+      mergedSubjects.forEach(sub => {
+        copyText += `${sub.icon || '📝'} ${sub.subject}：共${sub.total}题，对${sub.correct}，错${sub.wrong}，空${sub.blank}，准确率${sub.accuracy}%`;
+        if (sub.weak_points && sub.weak_points.length > 0) {
+          copyText += `，薄弱点：${sub.weak_points.join('、')}`;
+        }
+        if (sub.advice) {
+          copyText += `，建议：${sub.advice}`;
+        }
+        copyText += '\n';
+      });
+
       document.getElementById('summaryContent').innerHTML = `
         <div class="ai-summary-box">
           <div class="ai-summary-meta">${student.name} · ${formatDate(state.currentDate)}</div>
-          <pre class="ai-summary-text">${safe}</pre>
+          <pre class="ai-summary-text">${summaryText}</pre>
         </div>`;
-      document.getElementById('summaryContent').dataset.copyText = data.summary;
+      document.getElementById('summaryContent').dataset.copyText = copyText;
       document.getElementById('summaryActions').style.display = 'flex';
 
       // 写入历史
@@ -1459,8 +1472,7 @@ const summary = {
         student_id: studentId,
         period_start: state.currentDate,
         period_end: state.currentDate,
-        content: data.summary,
-        payload
+        content: copyText
       });
       await this.loadHistory('homework', studentId);
       toast.success('报告已生成');

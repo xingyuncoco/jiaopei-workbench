@@ -1879,7 +1879,7 @@ const profile = {
 
     // 获取本周数据（自然周：周一到周日）
     const today = new Date();
-    const dayOfWeek = today.getDay() || 7; // 把周日从0转为7
+    const dayOfWeek = today.getDay() || 7;
     const weekStart = new Date(today);
     weekStart.setDate(today.getDate() - dayOfWeek + 1);
     const weekEnd = new Date(weekStart);
@@ -1888,30 +1888,47 @@ const profile = {
     const weekStartStr = weekStart.toISOString().split('T')[0];
     const weekEndStr = weekEnd.toISOString().split('T')[0];
 
-    // 获取本周批改报告
-    const { data: weekReports } = await supabaseClient
-      .from('homework_reports')
-      .select('*')
-      .eq('student_id', studentId)
-      .gte('plan_date', weekStartStr)
-      .lte('plan_date', weekEndStr)
-      .order('plan_date', { ascending: false });
+    // 并行查询（优化性能）
+    const [weekReportsRes, allReportsRes, savedAnalysisRes, enrollRes] = await Promise.all([
+      // 本周批改报告
+      supabaseClient
+        .from('homework_reports')
+        .select('*')
+        .eq('student_id', studentId)
+        .gte('plan_date', weekStartStr)
+        .lte('plan_date', weekEndStr)
+        .order('plan_date', { ascending: false })
+        .limit(50),
+      // 所有批改报告（限制数量用于趋势计算）
+      supabaseClient
+        .from('homework_reports')
+        .select('subject_id, accuracy, plan_date, weak_points')
+        .eq('student_id', studentId)
+        .order('plan_date', { ascending: false })
+        .limit(100),
+      // 周总结报告
+      supabaseClient
+        .from('summary_history')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('kind', 'weekly')
+        .gte('period_start', weekStartStr)
+        .lte('period_end', weekEndStr)
+        .order('created_at', { ascending: false })
+        .limit(1),
+      // 入学基线
+      supabaseClient
+        .from('assessments')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('assess_type', 'enroll')
+        .limit(20)
+    ]);
 
-    // 获取所有批改报告（用于趋势计算）
-    const { data: allReports } = await supabaseClient
-      .from('homework_reports')
-      .select('subject_id, accuracy, plan_date, weak_points')
-      .eq('student_id', studentId)
-      .order('plan_date', { ascending: false });
-
-    // 获取最近一次生成的综合分析报告
-    const { data: savedAnalysis } = await supabaseClient
-      .from('summary_history')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('kind', 'profile_analysis')
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const weekReports = weekReportsRes.data;
+    const allReports = allReportsRes.data;
+    const weeklySummary = savedAnalysisRes.data;
+    const enrollAssessments = enrollRes.data;
 
     // 按科目分组计算准确率和趋势
     const subjectStats = {};
@@ -2058,14 +2075,7 @@ const profile = {
       </div>
     `;
 
-    // 获取所有科目的基本情况（入学基线）
-    const { data: enrollAssessments } = await supabaseClient
-      .from('assessments')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('assess_type', 'enroll');
-
-    // 按科目分组
+    // 按科目分组（使用并行查询获取的数据）
     const enrollBySubject = {};
     (enrollAssessments || []).forEach(a => {
       enrollBySubject[a.subject_id] = a;

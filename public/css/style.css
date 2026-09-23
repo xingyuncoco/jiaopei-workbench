@@ -1702,6 +1702,83 @@ html, body {
 .progress-tag.down { background: #FEE2E2; color: #991B1B; }
 .progress-tag.flat { background: var(--gray-100); color: var(--gray-500); }
 
+/* 周范围标签 */
+.week-range {
+  font-size: 11px;
+  color: var(--gray-400);
+  font-weight: normal;
+}
+
+/* 本周各科汇总 */
+.week-summary-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 0 12px 12px;
+  box-shadow: var(--shadow);
+}
+
+.week-summary-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.week-summary-item:last-child {
+  border-bottom: none;
+}
+
+.week-summary-subject {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.week-summary-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.week-summary-weak {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* 生成分析按钮 */
+.btn-generate-analysis {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-generate-analysis:active {
+  opacity: 0.9;
+}
+
+.btn-regenerate {
+  margin-left: 10px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.5);
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-regenerate:active {
+  background: rgba(255,255,255,0.2);
+}
+
 /* 科目卡片 */
 .subject-card {
   background: var(--white);

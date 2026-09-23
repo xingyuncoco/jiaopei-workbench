@@ -1877,17 +1877,46 @@ const profile = {
     const { student } = data;
     const studentId = student.id;
 
-    // 获取该学生所有科目的批改报告，用于计算各科准确率
-    const { data: reports } = await supabaseClient
+    // 获取本周数据（自然周：周一到周日）
+    const today = new Date();
+    const dayOfWeek = today.getDay() || 7; // 把周日从0转为7
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek + 1);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+    // 获取本周批改报告
+    const { data: weekReports } = await supabaseClient
+      .from('homework_reports')
+      .select('*')
+      .eq('student_id', studentId)
+      .gte('plan_date', weekStartStr)
+      .lte('plan_date', weekEndStr)
+      .order('plan_date', { ascending: false });
+
+    // 获取所有批改报告（用于趋势计算）
+    const { data: allReports } = await supabaseClient
       .from('homework_reports')
       .select('subject_id, accuracy, plan_date, weak_points')
       .eq('student_id', studentId)
       .order('plan_date', { ascending: false });
 
-    // 按科目分组计算准确率
+    // 获取最近一次生成的综合分析报告
+    const { data: savedAnalysis } = await supabaseClient
+      .from('summary_history')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('kind', 'profile_analysis')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    // 按科目分组计算准确率和趋势
     const subjectStats = {};
     state.subjects.forEach(s => {
-      const subjectReports = (reports || []).filter(r => r.subject_id === s.id);
+      const subjectReports = (allReports || []).filter(r => r.subject_id === s.id);
       if (subjectReports.length > 0) {
         const accuracies = subjectReports.map(r => Number(r.accuracy)).filter(a => a > 0);
         const avgAccuracy = accuracies.length > 0
@@ -1910,21 +1939,57 @@ const profile = {
       }
     });
 
-    // 生成综合分析（基于数据简单生成）
-    const improvingSubjects = Object.values(subjectStats).filter(s => s.trend > 0).map(s => s.subject.name);
-    const decliningSubjects = Object.values(subjectStats).filter(s => s.trend < 0).map(s => s.subject.name);
+    // 本周各科汇总
+    const weekBySubject = {};
+    (weekReports || []).forEach(r => {
+      const s = state.subjects.find(sub => sub.id === r.subject_id);
+      if (!s) return;
+      if (!weekBySubject[s.id]) {
+        weekBySubject[s.id] = { name: s.name, icon: s.icon, count: 0, accuracies: [], weakPoints: new Set() };
+      }
+      weekBySubject[s.id].count++;
+      if (r.accuracy) weekBySubject[s.id].accuracies.push(Number(r.accuracy));
+      if (r.weak_points) {
+        const wps = Array.isArray(r.weak_points) ? r.weak_points : String(r.weak_points).split(/[；;]/).filter(Boolean);
+        wps.forEach(wp => weekBySubject[s.id].weakPoints.add(wp));
+      }
+    });
 
-    let analysisText = '';
-    if (Object.keys(subjectStats).length === 0) {
-      analysisText = '暂无批改数据，请先进行拍照批改，系统将自动生成学情分析。';
-    } else if (improvingSubjects.length > 0 && decliningSubjects.length > 0) {
-      analysisText = `整体表现良好，${improvingSubjects.join('、')}有明显进步，${decliningSubjects[0]}需加强练习。`;
-    } else if (improvingSubjects.length > 0) {
-      analysisText = `各科目稳步提升，${improvingSubjects.join('、')}进步明显，继续保持！`;
-    } else if (decliningSubjects.length > 0) {
-      analysisText = `${decliningSubjects.join('、')}正确率有所下降，建议加强相关练习。`;
+    // 转换为数组
+    const weekSummary = Object.values(weekBySubject).map(item => ({
+      ...item,
+      avgAccuracy: item.accuracies.length > 0
+        ? Math.round(item.accuracies.reduce((a, b) => a + b, 0) / item.accuracies.length)
+        : 0,
+      weakPoints: [...item.weakPoints]
+    }));
+
+    // 综合分析卡片
+    let analysisHtml = '';
+    if (savedAnalysis && savedAnalysis.length > 0) {
+      // 显示已保存的分析
+      const analysis = savedAnalysis[0];
+      analysisHtml = `
+        <div class="profile-analysis-title">本周整体评估</div>
+        <div class="profile-analysis-content">${analysis.content}</div>
+        <div class="profile-analysis-meta">
+          基于 ${weekReports?.length || 0} 次批改 · ${weekStartStr} ~ ${weekEndStr}
+          <button class="btn-regenerate" onclick="profile.regenerateAnalysis()">重新生成</button>
+        </div>
+      `;
+    } else if ((weekReports || []).length === 0) {
+      analysisHtml = `
+        <div class="profile-analysis-title">本周整体评估</div>
+        <div class="profile-analysis-content">暂无本周批改数据，请先进行拍照批改。</div>
+        <div class="profile-analysis-meta">${weekStartStr} ~ ${weekEndStr}</div>
+      `;
     } else {
-      analysisText = '各科目表现稳定，继续保持当前学习节奏。';
+      // 有数据但未生成分析
+      analysisHtml = `
+        <div class="profile-analysis-title">本周整体评估</div>
+        <div class="profile-analysis-content">点击下方按钮，AI 将基于本周 ${weekReports.length} 次批改数据生成综合分析。</div>
+        <button class="btn-generate-analysis" onclick="profile.generateAnalysis()">🤖 生成综合分析</button>
+      `;
     }
 
     let html = `
@@ -1940,12 +2005,32 @@ const profile = {
       <!-- 综合分析 -->
       <div class="profile-section-head">
         <h3>📊 综合分析</h3>
+        <span class="week-range">${weekStartStr} ~ ${weekEndStr}</span>
       </div>
-      <div class="profile-analysis-card">
-        <div class="profile-analysis-title">本周整体评估</div>
-        <div class="profile-analysis-content">${analysisText}</div>
-        <div class="profile-analysis-meta">基于 ${reports?.length || 0} 次批改记录 · ${formatFullDate(new Date().toISOString())}</div>
+      <div class="profile-analysis-card" id="analysisCard">
+        ${analysisHtml}
       </div>
+
+      <!-- 本周各科汇总 -->
+      ${weekSummary.length > 0 ? `
+        <div class="profile-section-head">
+          <h3>📋 本周各科汇总</h3>
+        </div>
+        <div class="week-summary-card">
+          ${weekSummary.map(item => `
+            <div class="week-summary-item">
+              <div class="week-summary-subject">${item.icon || '📝'} ${item.name}</div>
+              <div class="week-summary-stats">
+                <span>批改 ${item.count} 次</span>
+                <span>平均 ${item.avgAccuracy}%</span>
+              </div>
+              ${item.weakPoints.length > 0 ? `
+                <div class="week-summary-weak">薄弱点：${item.weakPoints.join('、')}</div>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
 
       <!-- 科目列表 -->
       <div class="profile-section-head">
@@ -2184,6 +2269,121 @@ const profile = {
     } finally {
       loading.hide();
     }
+  },
+
+  // 生成综合分析（AI）
+  async generateAnalysis() {
+    const studentId = state.currentStudentId;
+    const student = state.students.find(s => s.id === studentId);
+
+    // 获取本周数据
+    const today = new Date();
+    const dayOfWeek = today.getDay() || 7;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek + 1);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+    // 获取本周批改数据
+    const { data: weekReports } = await supabaseClient
+      .from('homework_reports')
+      .select('*')
+      .eq('student_id', studentId)
+      .gte('plan_date', weekStartStr)
+      .lte('plan_date', weekEndStr)
+      .order('plan_date', { ascending: false });
+
+    if (!weekReports || weekReports.length === 0) {
+      toast.error('本周暂无批改数据');
+      return;
+    }
+
+    // 按科目汇总
+    const weekBySubject = {};
+    weekReports.forEach(r => {
+      const s = state.subjects.find(sub => sub.id === r.subject_id);
+      if (!s) return;
+      if (!weekBySubject[s.name]) {
+        weekBySubject[s.name] = { count: 0, accuracies: [], weakPoints: new Set(), suggestions: [] };
+      }
+      weekBySubject[s.name].count++;
+      if (r.accuracy) weekBySubject[s.name].accuracies.push(Number(r.accuracy));
+      if (r.weak_points) {
+        const wps = Array.isArray(r.weak_points) ? r.weak_points : String(r.weak_points).split(/[；;]/).filter(Boolean);
+        wps.forEach(wp => weekBySubject[s.name].weakPoints.add(wp));
+      }
+      if (r.suggestion) weekBySubject[s.name].suggestions.push(r.suggestion);
+    });
+
+    // 构建 prompt
+    const subjectSummary = Object.entries(weekBySubject).map(([name, data]) => {
+      const avgAcc = data.accuracies.length > 0
+        ? Math.round(data.accuracies.reduce((a, b) => a + b, 0) / data.accuracies.length)
+        : 0;
+      return `【${name}】批改${data.count}次，平均准确率${avgAcc}%，薄弱点：${[...data.weakPoints].join('、') || '无明显薄弱点'}，建议：${data.suggestions.slice(0, 2).join('；') || '继续保持'}`;
+    }).join('\n');
+
+    const prompt = `你是教培机构的学情分析专家。请根据以下学生本周的作业批改数据，生成一份综合学情分析报告。
+
+学生信息：${student?.name || '未知'} ${student?.grade || ''}年级
+时间范围：${weekStartStr} 至 ${weekEndStr}
+本周批改次数：${weekReports.length}次
+
+本周各科数据汇总：
+${subjectSummary}
+
+请生成一份综合分析报告，要求：
+1. 整体评价学生的本周表现
+2. 指出各科的优势和需要关注的地方
+3. 总结本周出现的核心薄弱点
+4. 给出具体、可操作的学习建议
+5. 语言要温暖、专业，适合给家长看
+6. 控制在 200 字以内
+
+直接输出报告内容，不要额外解释。`;
+
+    loading.show('AI 分析中...');
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, stream: false })
+      });
+
+      const result = await response.json();
+      const content = result.content || result.response || result.message || result.text || '';
+
+      if (!content) {
+        throw new Error('AI 未返回有效内容');
+      }
+
+      // 保存到 summary_history
+      const userResult = await supabaseClient.auth.getUser();
+      await supabaseClient.from('summary_history').insert({
+        kind: 'profile_analysis',
+        student_id: studentId,
+        period_start: weekStartStr,
+        period_end: weekEndStr,
+        content: content.trim(),
+        payload: { weekReports, weekBySubject, prompt }
+      });
+
+      toast.success('综合分析已生成');
+      await this.render();
+    } catch (error) {
+      console.error('生成分析失败:', error);
+      toast.error('生成失败：' + error.message);
+    } finally {
+      loading.hide();
+    }
+  },
+
+  // 重新生成综合分析
+  async regenerateAnalysis() {
+    if (!confirm('确定要重新生成吗？之前的分析会被覆盖。')) return;
+    await this.generateAnalysis();
   }
 
 };

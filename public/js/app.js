@@ -127,19 +127,7 @@ async function enterApp(user) {
   document.getElementById('loginPage').querySelector('form').reset();
   document.getElementById('app').style.display = '';
 
-  // 获取或创建用户配置（包含自定义显示名）
-  let displayName = (user.email || '').split('@')[0];  // 默认使用邮箱前缀
-  try {
-    const { profile } = await userProfilesAPI.getOrCreateProfile();
-    if (profile && profile.display_name) {
-      displayName = profile.display_name;
-    }
-  } catch (e) {
-    console.warn('获取用户配置失败，使用默认显示名:', e);
-  }
-
-  document.getElementById('userName').textContent = displayName;
-  document.getElementById('welcomeUserName').textContent = displayName;
+  document.getElementById('userName').textContent = (user.email || '').split('@')[0];
 
   const today = new Date();
   document.getElementById('todayDate').textContent =
@@ -184,48 +172,6 @@ async function handleLogout() {
   state.subjects = [];
   state.plans = [];
   showLogin();
-}
-
-// 显示设置弹窗
-async function showSettingsModal() {
-  const currentName = document.getElementById('userName').textContent;
-  modal.show('⚙️ 个人设置', `
-    <div class="modal-form">
-      <div class="form-item">
-        <label>显示名称</label>
-        <input type="text" id="settingsDisplayName" value="${currentName}" placeholder="输入你的显示名称" maxlength="20">
-        <small style="color:#666;font-size:12px;">这个名称会显示在欢迎语中，如：张老师</small>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="modal.close()">取消</button>
-        <button class="btn btn-primary" onclick="saveDisplayName()">保存</button>
-      </div>
-    </div>
-  `);
-}
-
-// 保存显示名称
-async function saveDisplayName() {
-  const displayName = document.getElementById('settingsDisplayName').value.trim();
-  if (!displayName) {
-    toast.error('显示名称不能为空');
-    return;
-  }
-  if (displayName.length > 20) {
-    toast.error('显示名称不能超过20个字符');
-    return;
-  }
-
-  try {
-    await userProfilesAPI.updateDisplayName(displayName);
-    document.getElementById('userName').textContent = displayName;
-    document.getElementById('welcomeUserName').textContent = displayName;
-    modal.close();
-    toast.success('显示名称已保存');
-  } catch (error) {
-    console.error('保存显示名称失败:', error);
-    toast.error('保存失败：' + (error.message || '请重试'));
-  }
 }
 
 // 标准科目清单（初中九科）
@@ -890,25 +836,33 @@ function minutesBetween(start, end) {
 }
 
 // 科目管理页面
-    // 生成错题列表 HTML
-    let errorsHtml = '';
-    const errors = report.errors_detail || [];
-    if (errors.length > 0) {
-      errorsHtml = `
-        <div class="error-list">
-          <h4 style="margin-bottom:12px">❌ 错题分析：</h4>
-          ${errors.map(err => `
-            <div class="error-item">
-              <h4>第${err.question_number}题</h4>
-              <p>学生答案：${err.student_answer}</p>
-              <p>正确答案：${err.correct_answer}</p>
-              <p>分析：${err.analysis}</p>
-            </div>
-          `).join('')}
+async function initSubjectsPage() {
+  await loadSubjects();
+}
+
+async function loadSubjects() {
+  const listEl = document.getElementById('subjectsList');
+
+  if (state.subjects.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📚</div>
+        <p class="empty-state-text">暂无科目，点击右上角添加</p>
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+  state.subjects.forEach(subject => {
+    html += `
+      <div class="list-item">
+        <div class="list-item-info">
+          <span style="font-size:24px">${subject.icon}</span>
           <div class="list-item-name">${subject.name}</div>
         </div>
         <div class="list-item-actions">
-      errorsHtml = '<p style="text-align:center;color:var(--success);padding:20px">🎉 全部正确，继续保持！</p>';
+          <button class="list-item-btn" onclick="subjects.showEditModal('${subject.id}')">✏️</button>
           <button class="list-item-btn" onclick="subjects.confirmDelete('${subject.id}')">🗑️</button>
         </div>
       </div>
@@ -923,14 +877,24 @@ const subjects = {
   _renderIcons(selectedIcon) {
     const icons = ['📐', '📝', '📖', '🔬', '⚡', '🧪', '🎨', '🎵', '🏀', '🗣️', '💻', '🌍', '☕', '🍱', '⏸️'];
     return icons.map(icon =>
-        <div class="accuracy-label">正确率 (${report.correct_count}/${report.total_count})</div>
+      `<div class="icon-option ${icon === selectedIcon ? 'active' : ''}" data-icon="${icon}">${icon}</div>`
+    ).join('');
+  },
+
+  showAddModal() {
+    modal.show('添加科目', `
       <div class="modal-form">
         <div class="form-item">
-      ${errorsHtml}
+          <label>科目名称 *</label>
+          <input type="text" id="subjectName" placeholder="如：数学 / 休息">
+        </div>
+        <div class="form-item">
+          <label>选择图标</label>
+          <div class="icon-picker" id="iconPicker">${this._renderIcons('📝')}</div>
         </div>
         <div class="form-item">
           <label>
-        <p>${report.suggestion}</p>
+            <input type="checkbox" id="subjectIsBreak">
             标记为休息科目
           </label>
         </div>
@@ -1492,10 +1456,6 @@ const summary = {
   },
 
   // === 板块一：作业情况（按学生 + 当天批改明细） ===
-  /**
-   * 生成作业情况报告（纯数据拼接，不调用 AI）
-   * 统计各科作业的对错空、正确率，整合薄弱点
-   */
   async generateHomework() {
     const studentId = document.getElementById('homeworkStudent').value;
     if (!studentId) { toast.error('请先选择学生'); return; }
@@ -1504,36 +1464,36 @@ const summary = {
 
     loading.show('生成中...');
     try {
+      const token = await authAPI.getAccessToken();
+      if (!token) { toast.error('登录已失效'); return; }
+
+      const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
       const subjectMap = Object.fromEntries(state.subjects.map(s => [s.id, s]));
       const { reports } = await reportsAPI.list({ date: state.currentDate, student_id: studentId });
       const mergedSubjects = this._mergeReportsBySubject(reports || [], subjectMap);
 
-      if (mergedSubjects.length === 0) {
-        toast.error('该学生今天还没有批改记录');
-        return;
-      }
+      const payload = {
+        mode: 'homework',
+        date: state.currentDate,
+        student_name: student.name,
+        grade: student.grade,
+        subjects: mergedSubjects
+      };
+      const resp = await fetch('/api/homework-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.summary) throw new Error(data.error || '生成失败');
 
-      // 统计整体情况
-      const totalQuestions = mergedSubjects.reduce((sum, s) => sum + s.total, 0);
-      const totalCorrect = mergedSubjects.reduce((sum, s) => sum + s.correct, 0);
-      const overallAccuracy = totalQuestions > 0 ? Math.round(totalCorrect / totalQuestions * 100) : 0;
-
-      // 收集所有薄弱点
-      const allWeakPoints = mergedSubjects
-        .filter(s => s.weak_points && s.weak_points.length > 0)
-        .flatMap(s => s.weak_points);
-
-      // 生成报告文本
-      const summaryText = this._buildHomeworkReportText(student, mergedSubjects, totalQuestions, totalCorrect, overallAccuracy, allWeakPoints);
-
-      // 显示报告
-      const safe = summaryText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const safe = data.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       document.getElementById('summaryContent').innerHTML = `
         <div class="ai-summary-box">
           <div class="ai-summary-meta">${student.name} · ${formatDate(state.currentDate)}</div>
           <pre class="ai-summary-text">${safe}</pre>
         </div>`;
-      document.getElementById('summaryContent').dataset.copyText = summaryText;
+      document.getElementById('summaryContent').dataset.copyText = data.summary;
       document.getElementById('summaryActions').style.display = 'flex';
 
       // 写入历史
@@ -1542,17 +1502,8 @@ const summary = {
         student_id: studentId,
         period_start: state.currentDate,
         period_end: state.currentDate,
-        content: summaryText,
-        payload: {
-          mode: 'homework',
-          date: state.currentDate,
-          student_name: student.name,
-          grade: student.grade,
-          subjects: mergedSubjects,
-          total_questions: totalQuestions,
-          total_correct: totalCorrect,
-          overall_accuracy: overallAccuracy
-        }
+        content: data.summary,
+        payload
       });
       await this.loadHistory('homework', studentId);
       toast.success('报告已生成');
@@ -1562,47 +1513,6 @@ const summary = {
     } finally {
       loading.hide();
     }
-  },
-
-  /**
-   * 构建作业情况报告文本
-   * @param {Object} student - 学生信息
-   * @param {Array} subjects - 各科合并后的数据
-   * @param {number} totalQuestions - 总题数
-   * @param {number} totalCorrect - 总正确数
-   * @param {number} overallAccuracy - 整体正确率
-   * @param {Array} allWeakPoints - 所有薄弱点
-   * @returns {string} 报告文本
-   */
-  _buildHomeworkReportText(student, subjects, totalQuestions, totalCorrect, overallAccuracy, allWeakPoints) {
-    const grade = student.grade ? `（${student.grade}）` : '';
-    const dateStr = formatDate(state.currentDate);
-
-    // 各科详情（按传入顺序排列，保证结果稳定）
-    const subjectDetails = subjects.map(s => {
-      const weak = s.weak_points.length > 0 ? `薄弱点：${s.weak_points.join('、')}` : '无明显薄弱点';
-      return `${s.icon || ''} ${s.subject}：${s.total}题，对${s.correct}错${s.wrong}空${s.blank}，正确率${s.accuracy}%${s.weak_points.length > 0 ? '，' + weak : ''}`;
-    }).join('\n');
-
-    // 薄弱点整合建议（去重并排序，保证顺序稳定）
-    let suggestion = '';
-    if (allWeakPoints.length > 0) {
-      const uniqueWeak = [...new Set(allWeakPoints)].sort();  // 排序保证顺序一致
-      suggestion = `建议加强练习：${uniqueWeak.join('、')}。`;
-    } else {
-      suggestion = '各科掌握情况良好，继续保持。';
-    }
-
-    return [
-      `${student.name}${grade} ${dateStr} 作业情况`,
-      '',
-      `今日共完成 ${totalQuestions} 题，整体正确率 ${overallAccuracy}%。`,
-      '',
-      '【各科情况】',
-      subjectDetails,
-      '',
-      suggestion
-    ].join('\n');
   },
 
   regenerate() { return this.generateHomework(); },
@@ -1726,16 +1636,12 @@ const summary = {
       if (!token) { toast.error('登录已失效'); return; }
 
       const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
-      const studentStats = stats.students[0] || {};
-
       const payload = {
         mode: 'daily',
         date: state.currentDate,
         student_name: student.name,
         grade: student.grade,
         subjects: stats.subjects,
-        student_reports: studentStats.reports || [],
-        weak_points: studentStats.weak_points || [],
         teacher_note: teacherNote
       };
       const resp = await fetch('/api/summarize', {
@@ -1793,13 +1699,11 @@ const summary = {
       if (!token) { toast.error('登录已失效'); return; }
 
       const [weekStart, weekEnd] = currentWeekRange();
-      const [weekStats, assessRes, dailySummariesRes] = await Promise.all([
+      const [weekStats, assessRes] = await Promise.all([
         weekStatsAPI.fetch(studentId, weekStart, weekEnd),
-        assessmentsAPI.listByStudent(studentId),
-        summaryHistoryAPI.listByStudentAndDateRange(studentId, weekStart, weekEnd)
+        assessmentsAPI.listByStudent(studentId)
       ]);
 
-      // weekStats 现在返回 { bySubject, daily, weekWeakPoints }
       const payload = {
         mode: 'weekly',
         student_name: student.name,
@@ -1807,10 +1711,7 @@ const summary = {
         enrolled_at: student.enrolled_at,
         week_start: weekStart,
         week_end: weekEnd,
-        week_stats_by_subject: weekStats.bySubject || [],
-        week_daily: weekStats.daily || [],
-        week_weak_points: weekStats.weekWeakPoints || [],
-        week_daily_summaries: dailySummariesRes.items || [],
+        week_stats: weekStats,
         assessments: assessRes.assessments.map(a => ({
           subject: a.subject?.name || '已删除科目',
           type: ASSESS_TYPES[a.assess_type] || a.assess_type,

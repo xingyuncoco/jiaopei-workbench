@@ -1964,31 +1964,53 @@ const profile = {
       weakPoints: [...item.weakPoints]
     }));
 
-    // 综合分析卡片
-    let analysisHtml = '';
-    if (savedAnalysis && savedAnalysis.length > 0) {
-      // 显示已保存的分析
-      const analysis = savedAnalysis[0];
-      analysisHtml = `
-        <div class="profile-analysis-title">本周整体评估</div>
-        <div class="profile-analysis-content">${analysis.content}</div>
-        <div class="profile-analysis-meta">
-          基于 ${weekReports?.length || 0} 次批改 · ${weekStartStr} ~ ${weekEndStr}
-          <button class="btn-regenerate" onclick="profile.regenerateAnalysis()">重新生成</button>
+    // 获取该学生本周的周总结（从 summary_history 表）
+    const { data: weeklySummary } = await supabaseClient
+      .from('summary_history')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('kind', 'weekly')
+      .gte('period_start', weekStartStr)
+      .lte('period_end', weekEndStr)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    // 综合分析提示卡片
+    let analysisHintHtml = '';
+    if (weeklySummary && weeklySummary.length > 0) {
+      // 已有周总结
+      analysisHintHtml = `
+        <div class="profile-analysis-hint success">
+          <div class="hint-icon">✅</div>
+          <div class="hint-text">
+            <div class="hint-title">${weekStartStr} ~ ${weekEndStr} 周总结已生成</div>
+            <div class="hint-sub">包含综合分析报告，可一键发送给家长</div>
+          </div>
+          <button class="btn-view-summary" onclick="profile.viewWeeklySummary('${weeklySummary[0].id}')">查看报告</button>
         </div>
       `;
     } else if ((weekReports || []).length === 0) {
-      analysisHtml = `
-        <div class="profile-analysis-title">本周整体评估</div>
-        <div class="profile-analysis-content">暂无本周批改数据，请先进行拍照批改。</div>
-        <div class="profile-analysis-meta">${weekStartStr} ~ ${weekEndStr}</div>
+      // 无本周数据
+      analysisHintHtml = `
+        <div class="profile-analysis-hint empty">
+          <div class="hint-icon">📋</div>
+          <div class="hint-text">
+            <div class="hint-title">暂无本周批改数据</div>
+            <div class="hint-sub">请先进行拍照批改，再生成周总结</div>
+          </div>
+        </div>
       `;
     } else {
-      // 有数据但未生成分析
-      analysisHtml = `
-        <div class="profile-analysis-title">本周整体评估</div>
-        <div class="profile-analysis-content">点击下方按钮，AI 将基于本周 ${weekReports.length} 次批改数据生成综合分析。</div>
-        <button class="btn-generate-analysis" onclick="profile.generateAnalysis()">🤖 生成综合分析</button>
+      // 有数据但未生成周总结
+      analysisHintHtml = `
+        <div class="profile-analysis-hint warning">
+          <div class="hint-icon">⏰</div>
+          <div class="hint-text">
+            <div class="hint-title">本周 ${weekReports?.length || 0} 次批改待生成报告</div>
+            <div class="hint-sub">去「总结」页面生成周总结，包含综合分析</div>
+          </div>
+          <button class="btn-goto-summary" onclick="router.navigate('summary')">去生成</button>
+        </div>
       `;
     }
 
@@ -2002,13 +2024,12 @@ const profile = {
         </div>
       </div>
 
-      <!-- 综合分析 -->
+      <!-- 周总结提示 -->
       <div class="profile-section-head">
-        <h3>📊 综合分析</h3>
-        <span class="week-range">${weekStartStr} ~ ${weekEndStr}</span>
+        <h3>📊 周总结报告</h3>
       </div>
-      <div class="profile-analysis-card" id="analysisCard">
-        ${analysisHtml}
+      <div class="profile-analysis-card">
+        ${analysisHintHtml}
       </div>
 
       <!-- 本周各科汇总 -->
@@ -2380,10 +2401,54 @@ ${subjectSummary}
     }
   },
 
-  // 重新生成综合分析
-  async regenerateAnalysis() {
-    if (!confirm('确定要重新生成吗？之前的分析会被覆盖。')) return;
-    await this.generateAnalysis();
+  // 查看周总结报告弹窗
+  async viewWeeklySummary(summaryId) {
+    const { data: summary } = await supabaseClient
+      .from('summary_history')
+      .select('*')
+      .eq('id', summaryId)
+      .single();
+
+    if (!summary) {
+      toast.error('未找到报告');
+      return;
+    }
+
+    const student = state.students.find(s => s.id === summary.student_id);
+
+    modal.show('周总结报告', `
+      <div class="weekly-report-modal">
+        <div class="report-header">
+          <div class="report-title">${student?.name || '学生'} 周学习报告</div>
+          <div class="report-period">${summary.period_start} ~ ${summary.period_end}</div>
+        </div>
+        <div class="report-content">
+          ${summary.content.split('\n').map(p => `<p>${p}</p>`).join('')}
+        </div>
+        <div class="report-footer">
+          <div class="report-time">生成时间：${new Date(summary.created_at).toLocaleString('zh-CN')}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="modal.close()">关闭</button>
+          <button class="btn btn-primary" onclick="profile.copyReportToClipboard()">复制报告</button>
+        </div>
+      </div>
+    `);
+
+    // 临时保存当前报告内容用于复制
+    this._currentReport = summary.content;
+  },
+
+  // 复制报告到剪贴板
+  async copyReportToClipboard() {
+    if (!this._currentReport) return;
+    try {
+      await navigator.clipboard.writeText(this._currentReport);
+      toast.success('已复制到剪贴板');
+      modal.close();
+    } catch (e) {
+      toast.error('复制失败');
+    }
   }
 
 };

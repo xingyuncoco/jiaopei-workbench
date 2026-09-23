@@ -1916,9 +1916,9 @@ const profile = {
         .lte('period_end', weekEndStr)
         .order('created_at', { ascending: false })
         .limit(1),
-      // 入学基线
+      // 入学基线（注意：数据库表名是 subject_assessments，写错会 404）
       supabaseClient
-        .from('assessments')
+        .from('subject_assessments')
         .select('*')
         .eq('student_id', studentId)
         .eq('assess_type', 'enroll')
@@ -2214,10 +2214,10 @@ const profile = {
   async editSubjectBasic(subjectId, subjectName, assessId) {
     let currentData = { level: '', weak_points: '', note: '' };
 
-    // 如果有现有数据，先获取
+    // 如果有现有数据，先获取（表名必须是 subject_assessments，否则 404 导致回显为空）
     if (assessId) {
       const { data } = await supabaseClient
-        .from('assessments')
+        .from('subject_assessments')
         .select('*')
         .eq('id', assessId)
         .single();
@@ -2269,11 +2269,12 @@ const profile = {
     loading.show('保存中...');
     try {
       if (assessId) {
-        // 更新现有记录
-        await supabaseClient
-          .from('assessments')
+        // 更新现有记录（必须检查 error，否则更新失败也会弹"已更新"造成假保存）
+        const { error: updateError } = await supabaseClient
+          .from('subject_assessments')
           .update(payload)
           .eq('id', assessId);
+        if (updateError) throw updateError;
         toast.success('已更新');
       } else {
         // 新建记录

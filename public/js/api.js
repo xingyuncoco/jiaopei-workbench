@@ -448,19 +448,23 @@ window.dailyStatsAPI = {
       if (!students[name]) students[name] = { student: name, total: 0, completed: 0, accuracies: [], weak_points: [], reports: [] }
       if (typeof r.accuracy === 'number') students[name].accuracies.push(r.accuracy)
       // 收集薄弱点和老师建议
-      if (r.weak_points) {
-        const weakPoints = String(r.weak_points).split(/[；;]/).map(s => s.trim()).filter(Boolean)
-        students[name].weak_points.push(...weakPoints)
+      const weakPoints = r.weak_points;
+      if (weakPoints) {
+        if (Array.isArray(weakPoints)) {
+          students[name].weak_points.push(...weakPoints)
+        } else if (typeof weakPoints === 'string') {
+          students[name].weak_points.push(...weakPoints.split(/[；;]/).map(s => s.trim()).filter(Boolean))
+        }
       }
       students[name].reports.push({
         subject: r.subject?.name || '未知',
         accuracy: r.accuracy,
-        total: r.total_questions,
-        correct: r.correct_count,
-        wrong: r.wrong_count,
-        blank: r.blank_count,
-        weak_points: r.weak_points,
-        advice: r.overall_advice
+        total: r.total_count || r.total_questions || 0,
+        correct: r.correct_count || 0,
+        wrong: r.wrong_count || 0,
+        blank: r.empty_count || r.blank_count || 0,
+        weak_points: weakPoints,
+        advice: r.suggestion || r.overall_advice || r.advice
       })
     })
 

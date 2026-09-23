@@ -1613,12 +1613,17 @@ const summary = {
       if (!token) { toast.error('登录已失效'); return; }
 
       const stats = await dailyStatsAPI.fetch(state.currentDate, studentId);
+      // 找到该学生的数据
+      const studentStats = stats.students && stats.students[0];
+      
       const payload = {
         mode: 'daily',
         date: state.currentDate,
         student_name: student.name,
         grade: student.grade,
-        subjects: stats.subjects,
+        // 传入学生的批改报告详情，让 AI 分析
+        student_reports: studentStats?.reports || [],
+        weak_points: studentStats?.weak_points || [],
         teacher_note: teacherNote
       };
       const resp = await fetch('/api/summarize', {
@@ -1646,8 +1651,7 @@ const summary = {
         period_start: state.currentDate,
         period_end: state.currentDate,
         teacher_note: teacherNote,
-        content: data.summary,
-        payload
+        content: data.summary
       });
       await this.loadHistory('daily', studentId);
       toast.success('日常总结已生成');

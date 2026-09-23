@@ -121,9 +121,17 @@ function buildDailyPrompt(p) {
     p.student_reports.forEach(r => {
       const accStr = r.accuracy != null ? `正确率${r.accuracy}%` : '未批改';
       const detail = r.total ? `（${r.correct}对/${r.wrong}错/${r.blank}空）` : '';
-      const weak = r.weak_points ? `薄弱点：${r.weak_points}` : '';
+      const weakPoints = r.weak_points;
+      let weak = '';
+      if (weakPoints) {
+        if (Array.isArray(weakPoints)) {
+          weak = weakPoints.length ? `薄弱点：${weakPoints.join('、')}` : '';
+        } else if (typeof weakPoints === 'string') {
+          weak = weakPoints ? `薄弱点：${weakPoints}` : '';
+        }
+      }
       const advice = r.advice ? `建议：${r.advice}` : '';
-      lines.push(`- ${r.subject}：${accStr} ${detail}`);
+      lines.push(`- ${r.subject || '未知'}：${accStr} ${detail}`);
       if (weak) lines.push(`  ${weak}`);
       if (advice) lines.push(`  ${advice}`);
     });

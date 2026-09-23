@@ -1996,13 +1996,21 @@ const profile = {
           <div class="hint-icon">📋</div>
           <div class="hint-text">
             <div class="hint-title">暂无本周批改数据</div>
-            <div class="hint-sub">请先进行拍照批改，再生成周总结</div>
+            <div class="hint-sub">请先进行拍照批改</div>
           </div>
         </div>
       `;
     } else {
-      // 有数据但未生成周总结 - 不显示提示
-      analysisHintHtml = '';
+      // 有数据但未生成周总结
+      analysisHintHtml = `
+        <div class="profile-analysis-hint warning">
+          <div class="hint-icon">⏰</div>
+          <div class="hint-text">
+            <div class="hint-title">本周 ${weekReports?.length || 0} 次批改</div>
+            <div class="hint-sub">等待老师统计报告总结...</div>
+          </div>
+        </div>
+      `;
     }
 
     let html = `

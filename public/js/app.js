@@ -1981,17 +1981,6 @@ const profile = {
       weakPoints: [...item.weakPoints]
     }));
 
-    // 获取该学生本周的周总结（从 summary_history 表）
-    const { data: weeklySummary } = await supabaseClient
-      .from('summary_history')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('kind', 'weekly')
-      .gte('period_start', weekStartStr)
-      .lte('period_end', weekEndStr)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
     // 综合分析提示卡片
     let analysisHintHtml = '';
     if (weeklySummary && weeklySummary.length > 0) {

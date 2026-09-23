@@ -18,7 +18,7 @@ const state = {
 
 // 路由控制
 const router = {
-  pages: ['home', 'students', 'plans', 'subjects', 'correct', 'summary', 'profile'],
+  pages: ['home', 'students', 'plans', 'subjects', 'correct', 'summary', 'profile', 'subjectProfile'],
 
   navigate(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -39,6 +39,7 @@ const router = {
     if (page === 'correct') initCorrectPage();
     if (page === 'summary') initSummaryPage();
     if (page === 'profile') initProfilePage();
+    if (page === 'subjectProfile') initSubjectProfilePage();
 
     window.scrollTo(0, 0);
   }
@@ -1196,26 +1197,42 @@ const correct = {
       // 同一批次多张照片共享一个 batch_id
       const batchId = crypto.randomUUID();
 
+      // 用于汇总评估记录
+      let totalCorrect = 0, totalWrong = 0, totalEmpty = 0, totalCount = 0;
+      const allWeakPoints = [];
+
       // 每张照片单独存一条 homework_reports（保留每页的原始结果）
       for (let i = 0; i < this.photos.length; i++) {
         const photo = this.photos[i];
         const r = this.results[i] || {};
-        const total_count = r.total_count || r.total || 0;
-        const correct_count = r.correct_count || r.correct || 0;
-        const wrong_count = r.wrong_count || r.wrong || 0;
-        const empty_count = r.empty_count || r.empty || r.blank || 0;
-        const accuracy = total_count > 0 ? Math.round(correct_count / total_count * 100) : 0;
+        const tc = r.total_count || r.total || 0;
+        const cc = r.correct_count || r.correct || 0;
+        const wc = r.wrong_count || r.wrong || 0;
+        const ec = r.empty_count || r.empty || r.blank || 0;
+        const acc = tc > 0 ? Math.round(cc / tc * 100) : 0;
+
+        // 累计
+        totalCount += tc;
+        totalCorrect += cc;
+        totalWrong += wc;
+        totalEmpty += ec;
+
+        // 收集薄弱点
+        if (r.weak_points) {
+          const wps = Array.isArray(r.weak_points) ? r.weak_points : [r.weak_points];
+          wps.forEach(wp => wp && allWeakPoints.push(wp));
+        }
 
         await reportsAPI.create({
           student_id: studentId,
           subject_id: subjectId,
           plan_date: state.currentDate,
           plan_id: planId,
-          accuracy,
-          total_count,
-          correct_count,
-          wrong_count,
-          empty_count,
+          accuracy: acc,
+          total_count: tc,
+          correct_count: cc,
+          wrong_count: wc,
+          empty_count: ec,
           weak_points: r.weak_points || [],
           suggestion: r.suggestion || r.advice || null,
           batch_id: batchId,
@@ -1226,6 +1243,32 @@ const correct = {
       // 自动标记规划为已完成
       if (planId) {
         try { await plansAPI.toggleComplete(planId, true); } catch (_) {}
+      }
+
+      // 自动创建评估记录（来自拍照批改）
+      try {
+        const totalAccuracy = totalCount > 0 ? Math.round(totalCorrect / totalCount * 100) : 0;
+        // 根据准确率计算等级
+        let level = 1;
+        if (totalAccuracy >= 95) level = 5;      // S
+        else if (totalAccuracy >= 90) level = 4;  // A
+        else if (totalAccuracy >= 80) level = 3;  // B
+        else if (totalAccuracy >= 70) level = 2;  // C
+        else if (totalAccuracy >= 60) level = 1;  // D
+
+        const weakPointsStr = [...new Set(allWeakPoints)].join('、');
+
+        await assessmentsAPI.create({
+          student_id: studentId,
+          subject_id: subjectId,
+          assess_type: 'daily',
+          assess_date: state.currentDate,
+          level,
+          weak_points: weakPointsStr || null,
+          note: `拍照批改自动生成（准确率${totalAccuracy}%）`
+        });
+      } catch (e) {
+        console.warn('自动创建评估记录失败:', e);
       }
 
       toast.success(`已保存 ${this.photos.length} 张批改`);
@@ -1831,69 +1874,112 @@ const profile = {
       return;
     }
 
-    const { student, comparison } = data;
-    const weakList = comparison.filter(c => c.isWeak);
+    const { student } = data;
+    const studentId = student.id;
+
+    // 获取该学生所有科目的批改报告，用于计算各科准确率
+    const { data: reports } = await supabaseClient
+      .from('homework_reports')
+      .select('subject_id, accuracy, plan_date, weak_points')
+      .eq('student_id', studentId)
+      .order('plan_date', { ascending: false });
+
+    // 按科目分组计算准确率
+    const subjectStats = {};
+    state.subjects.forEach(s => {
+      const subjectReports = (reports || []).filter(r => r.subject_id === s.id);
+      if (subjectReports.length > 0) {
+        const accuracies = subjectReports.map(r => Number(r.accuracy)).filter(a => a > 0);
+        const avgAccuracy = accuracies.length > 0
+          ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length)
+          : 0;
+        // 计算趋势（最新5次 vs 前5次）
+        const recent = accuracies.slice(0, 5);
+        const older = accuracies.slice(5, 10);
+        const recentAvg = recent.length > 0 ? Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) : 0;
+        const olderAvg = older.length > 0 ? Math.round(older.reduce((a, b) => a + b, 0) / older.length) : recentAvg;
+        const trend = recentAvg - olderAvg;
+
+        subjectStats[s.id] = {
+          subject: s,
+          reportCount: subjectReports.length,
+          avgAccuracy,
+          trend,
+          recentAccuracy: recentAvg
+        };
+      }
+    });
+
+    // 生成综合分析（基于数据简单生成）
+    const improvingSubjects = Object.values(subjectStats).filter(s => s.trend > 0).map(s => s.subject.name);
+    const decliningSubjects = Object.values(subjectStats).filter(s => s.trend < 0).map(s => s.subject.name);
+
+    let analysisText = '';
+    if (Object.keys(subjectStats).length === 0) {
+      analysisText = '暂无批改数据，请先进行拍照批改，系统将自动生成学情分析。';
+    } else if (improvingSubjects.length > 0 && decliningSubjects.length > 0) {
+      analysisText = `整体表现良好，${improvingSubjects.join('、')}有明显进步，${decliningSubjects[0]}需加强练习。`;
+    } else if (improvingSubjects.length > 0) {
+      analysisText = `各科目稳步提升，${improvingSubjects.join('、')}进步明显，继续保持！`;
+    } else if (decliningSubjects.length > 0) {
+      analysisText = `${decliningSubjects.join('、')}正确率有所下降，建议加强相关练习。`;
+    } else {
+      analysisText = '各科目表现稳定，继续保持当前学习节奏。';
+    }
 
     let html = `
+      <!-- 基本信息卡片 -->
       <div class="profile-card">
         <div class="profile-name">${student.name}</div>
         <div class="profile-meta">
           <span>${student.grade || '未填年级'}</span>
           <span>入学：${student.enrolled_at || '未填'}</span>
         </div>
-        ${weakList.length ? `<div class="profile-weak">⚠️ 薄弱科目：${weakList.map(c => c.subject.name).join('、')}</div>` : ''}
       </div>
 
+      <!-- 综合分析 -->
       <div class="profile-section-head">
-        <h3>各科水平对比</h3>
-        <div class="profile-actions">
-          <button class="btn btn-primary btn-sm" onclick="profile.showAddModal()">＋ 记录学情</button>
-        </div>
+        <h3>📊 综合分析</h3>
       </div>
-      <div class="assess-table">
-        <div class="assess-row assess-row-head">
-          <span>科目</span><span>入学</span><span>现在</span><span>变化</span>
-        </div>
+      <div class="profile-analysis-card">
+        <div class="profile-analysis-title">本周整体评估</div>
+        <div class="profile-analysis-content">${analysisText}</div>
+        <div class="profile-analysis-meta">基于 ${reports?.length || 0} 次批改记录 · ${formatFullDate(new Date().toISOString())}</div>
+      </div>
+
+      <!-- 科目列表 -->
+      <div class="profile-section-head">
+        <h3>📚 科目详情（点击查看）</h3>
+      </div>
     `;
 
-    comparison.forEach(row => {
-      html += `
-        <div class="assess-row">
-          <span class="assess-subject">${row.subject.icon || ''} ${row.subject.name}${row.isWeak ? ' <em class="weak-tag">薄弱</em>' : ''}</span>
-          <span>${renderLevelDots(row.baseline?.level)}</span>
-          <span>${renderLevelDots(row.latest?.level)}</span>
-          <span>${renderDelta(row.delta)}</span>
-        </div>
-      `;
-    });
-
-    html += '</div>';
-
-    // 历次记录（按时间倒序）
-    const allHistory = comparison.flatMap(c => c.history).sort((a, b) => b.assess_date.localeCompare(a.assess_date));
-    html += `<div class="profile-section-head"><h3>评估记录（${allHistory.length}）</h3></div>`;
-
-    if (allHistory.length === 0) {
-      html += '<div class="empty-state"><p class="empty-state-text">还没有学情记录，点击上方「记录学情」录入入学基线</p></div>';
+    if (Object.keys(subjectStats).length === 0) {
+      html += '<div class="empty-state"><p class="empty-state-text">暂无科目数据，请先进行拍照批改</p></div>';
     } else {
-      html += '<div class="history-list">';
-      allHistory.forEach(item => {
+      // 按准确率排序
+      const sortedSubjects = Object.values(subjectStats).sort((a, b) => b.avgAccuracy - a.avgAccuracy);
+      sortedSubjects.forEach(s => {
+        const trendClass = s.trend > 0 ? 'up' : s.trend < 0 ? 'down' : 'flat';
+        const trendText = s.trend > 0 ? `📈 +${s.trend}%` : s.trend < 0 ? `📉 ${s.trend}%` : '— 持平';
+        const trendBadge = s.trend !== 0 ? `<span class="progress-tag ${trendClass}">${trendText}</span>` : '';
+
         html += `
-          <div class="history-item">
-            <div class="history-main">
-              <div class="history-title">
-                ${item.subject?.icon || ''} ${item.subject?.name || '已删除科目'}
-                <em class="type-tag ${item.assess_type}">${ASSESS_TYPES[item.assess_type] || item.assess_type}</em>
-              </div>
-              <div class="history-sub">${item.assess_date} · ${LEVEL_LABELS[item.level]}</div>
-              ${item.weak_points ? `<div class="history-weak">薄弱点：${item.weak_points}</div>` : ''}
-              ${item.note ? `<div class="history-note">${item.note}</div>` : ''}
+          <div class="subject-list-item" onclick="subjectProfile.open('${s.subject.id}', '${s.subject.name}')">
+            <div class="subject-info">
+              <span class="subject-icon">${s.subject.icon || '📝'}</span>
+              <span>${s.subject.name}</span>
             </div>
-            <button class="list-item-btn" onclick="profile.remove('${item.id}')">🗑️</button>
+            <div class="subject-stats">
+              <span class="subject-accuracy">${s.avgAccuracy}%</span>
+              <div class="subject-bar">
+                <div class="subject-bar-fill" style="width: ${s.avgAccuracy}%"></div>
+              </div>
+              ${trendBadge}
+              <span class="subject-arrow">→</span>
+            </div>
           </div>
         `;
       });
-      html += '</div>';
     }
 
     container.innerHTML = html;
@@ -1990,6 +2076,224 @@ const profile = {
 
   };
 
+// 科目详情页（成长曲线 + 薄弱点追踪）
+const subjectProfile = {
+  currentSubjectId: null,
+
+  open(subjectId, subjectName) {
+    this.currentSubjectId = subjectId;
+    document.getElementById('subjectProfileTitle').textContent = `📐 ${subjectName}`;
+    router.navigate('subjectProfile');
+  },
+
+  async render() {
+    const container = document.getElementById('subjectProfileContent');
+    const studentId = state.currentStudentId;
+    const subjectId = this.currentSubjectId;
+
+    if (!studentId || !subjectId) {
+      container.innerHTML = '<div class="empty-state"><p>数据加载失败</p></div>';
+      return;
+    }
+
+    // 获取该科目的所有批改报告
+    const { data: reports, error } = await supabaseClient
+      .from('homework_reports')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('subject_id', subjectId)
+      .order('plan_date', { ascending: false })
+      .limit(30);
+
+    if (error) {
+      container.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
+      return;
+    }
+
+    const student = state.students.find(s => s.id === studentId);
+    const subject = state.subjects.find(s => s.id === subjectId);
+
+    // 1. 成长曲线
+    const chartData = reports
+      .filter(r => r.accuracy > 0)
+      .map(r => ({ date: r.plan_date, accuracy: Number(r.accuracy) }))
+      .reverse();
+
+    // 2. 计算薄弱点统计
+    const weakPointsMap = {};
+    const baselineWeakPoints = new Set();
+    const currentWeakPoints = new Set();
+
+    reports.forEach((r, index) => {
+      const wps = r.weak_points || [];
+      const wpsArray = Array.isArray(wps) ? wps : String(wps).split(/[；;]/).filter(Boolean);
+      
+      wpsArray.forEach(wp => {
+        if (!weakPointsMap[wp]) {
+          weakPointsMap[wp] = { count: 0, firstDate: r.plan_date, lastDate: r.plan_date };
+        }
+        weakPointsMap[wp].count++;
+        weakPointsMap[wp].lastDate = r.plan_date;
+      });
+
+      // 第一条（最老的）作为入学前
+      if (index === reports.length - 1) {
+        wpsArray.forEach(wp => baselineWeakPoints.add(wp));
+      }
+      // 最新的作为现在
+      if (index === 0) {
+        wpsArray.forEach(wp => currentWeakPoints.add(wp));
+      }
+    });
+
+    // 3. 计算掌握度（最近正确率趋势）
+    const recentAccuracy = chartData.length > 0
+      ? Math.round(chartData.slice(-5).reduce((a, b) => a + b.accuracy, 0) / Math.min(chartData.length, 5))
+      : 0;
+    const baselineAccuracy = chartData.length > 0 ? chartData[0].accuracy : 0;
+    const accuracyDelta = recentAccuracy - baselineAccuracy;
+
+    // 4. 薄弱点对比
+    const improvedPoints = [...baselineWeakPoints].filter(wp => !currentWeakPoints.has(wp));
+    const persistentPoints = [...baselineWeakPoints].filter(wp => currentWeakPoints.has(wp));
+    const newPoints = [...currentWeakPoints].filter(wp => !baselineWeakPoints.has(wp));
+
+    // 计算掌握度
+    const baselineCount = baselineWeakPoints.size || 1;
+    const improvedCount = improvedPoints.length;
+    const masteryRate = baselineWeakPoints.size > 0
+      ? Math.round(((baselineCount - persistentPoints.length) / baselineCount) * 100)
+      : 0;
+    const currentMasteryRate = currentWeakPoints.size > 0
+      ? Math.round((improvedCount / (baselineWeakPoints.size || 1)) * 100)
+      : 0;
+
+    let html = `
+      <!-- 成长曲线 -->
+      <div class="profile-section-head">
+        <h3>📈 成长曲线</h3>
+      </div>
+      <div class="chart-card">
+        <div id="accuracyChart" style="width: 100%; height: 220px;"></div>
+        <div class="trend-summary">
+          ${accuracyDelta > 0 
+            ? `<span class="trend-up">📈 趋势：+${accuracyDelta}%（明显进步）</span>` 
+            : accuracyDelta < 0 
+              ? `<span class="trend-down">📉 趋势：${accuracyDelta}%（需关注）</span>`
+              : `<span class="trend-flat">— 趋势：持平</span>`
+          }
+          <span class="current-accuracy">当前平均准确率：${recentAccuracy}%</span>
+        </div>
+      </div>
+
+      <!-- 薄弱点追踪 -->
+      <div class="profile-section-head">
+        <h3>🎯 薄弱点追踪</h3>
+      </div>
+      <div class="weak-points-card">
+        <div class="weak-points-comparison">
+          <div class="weak-column baseline">
+            <div class="weak-column-title">入学前薄弱点</div>
+            ${baselineWeakPoints.size > 0 
+              ? [...baselineWeakPoints].map(wp => `<div class="weak-tag baseline">❌ ${wp}</div>`).join('')
+              : '<div class="empty-weak">暂无数据</div>'
+            }
+          </div>
+          <div class="weak-arrow">→</div>
+          <div class="weak-column current">
+            <div class="weak-column-title">现在薄弱点</div>
+            ${currentWeakPoints.size > 0
+              ? [...currentWeakPoints].map(wp => {
+                  const isImproved = improvedPoints.includes(wp);
+                  const isNew = newPoints.includes(wp);
+                  if (isImproved) return `<div class="weak-tag improved">✅ ${wp}</div>`;
+                  if (isNew) return `<div class="weak-tag new">❌ ${wp}（新增）</div>`;
+                  return `<div class="weak-tag persistent">⚠️ ${wp}</div>`;
+                }).join('')
+              : '<div class="empty-weak">✅ 已无薄弱点</div>'
+            }
+          </div>
+        </div>
+        <div class="mastery-rate">
+          薄弱点掌握度：${masteryRate}% → ${Math.min(currentMasteryRate, 100)}% 
+          ${currentMasteryRate > masteryRate ? `<span class="mastery-up">(+${currentMasteryRate - masteryRate}%)</span>` : ''}
+        </div>
+      </div>
+
+      <!-- 评估记录 -->
+      <div class="profile-section-head">
+        <h3>📝 评估记录（来自拍照批改）</h3>
+      </div>
+    `;
+
+    if (reports.length === 0) {
+      html += '<div class="empty-state"><p>暂无评估记录</p></div>';
+    } else {
+      html += '<div class="history-list">';
+      reports.forEach(r => {
+        const weakPointsStr = Array.isArray(r.weak_points) 
+          ? r.weak_points.join('、') 
+          : r.weak_points || '';
+        html += `
+          <div class="history-item">
+            <div class="history-main">
+              <div class="history-title">
+                📅 ${r.plan_date}
+                <span class="accuracy-badge ${r.accuracy >= 85 ? 'good' : r.accuracy >= 70 ? 'ok' : 'poor'}">
+                  正确率 ${r.accuracy}%
+                </span>
+              </div>
+              ${weakPointsStr ? `<div class="history-weak">薄弱点：${weakPointsStr}</div>` : ''}
+              ${r.suggestion ? `<div class="history-note">建议：${r.suggestion}</div>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+
+    // 渲染图表
+    if (chartData.length > 0) {
+      const chart = echarts.init(document.getElementById('accuracyChart'));
+      const dates = chartData.map(d => d.date.slice(5));
+      const accuracies = chartData.map(d => d.accuracy);
+
+      chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: '10%', right: '10%', bottom: '15%', top: '10%' },
+        xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10 } },
+        yAxis: { 
+          type: 'value', 
+          min: 0, max: 100,
+          axisLabel: { formatter: '{value}%', fontSize: 10 }
+        },
+        series: [{
+          data: accuracies,
+          type: 'line',
+          smooth: true,
+          lineStyle: { width: 2 },
+          itemStyle: { color: '#4F46E5' },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(79, 70, 229, 0.3)' },
+              { offset: 1, color: 'rgba(79, 70, 229, 0.05)' }
+            ])
+          },
+          label: { show: true, formatter: '{c}%', fontSize: 9 }
+        }]
+      });
+
+      window.addEventListener('resize', () => chart.resize());
+    }
+  }
+};
+
+async function initSubjectProfilePage() {
+  await subjectProfile.render();
+}
+
 async function initProfilePage() {
   await profile.render();
 }
@@ -2010,3 +2314,4 @@ window.plans = plans;
 window.subjects = subjects;
 window.correct = correct;
 window.summary = summary;
+window.subjectProfile = subjectProfile;

@@ -9,6 +9,7 @@
   <meta name="theme-color" content="#4F46E5">
   <title>理想树教培工作台</title>
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 </head>
 <body>
   <!-- 登录页：未登录时唯一可见的界面 -->
@@ -95,6 +96,15 @@
           <h2>📈 学情档案</h2>
         </div>
         <div id="profileContent"></div>
+      </section>
+
+      <!-- 科目详情页面 -->
+      <section id="subjectProfilePage" class="page">
+        <div class="page-header">
+          <button class="back-btn" onclick="router.navigate('profile')">← 返回</button>
+          <h2 id="subjectProfileTitle">📐 数学</h2>
+        </div>
+        <div id="subjectProfileContent"></div>
       </section>
 
       <!-- 作业规划页面 -->

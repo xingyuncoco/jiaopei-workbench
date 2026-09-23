@@ -1505,6 +1505,203 @@ html, body {
   border-radius: 4px;
 }
 
+/* 科目详情页样式 */
+.chart-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 0 12px 12px;
+  box-shadow: var(--shadow);
+}
+
+.trend-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.trend-up { color: var(--success); font-weight: 600; }
+.trend-down { color: var(--danger); font-weight: 600; }
+.trend-flat { color: var(--gray-500); }
+.current-accuracy { color: var(--gray-500); }
+
+/* 薄弱点对比 */
+.weak-points-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 0 12px 12px;
+  box-shadow: var(--shadow);
+}
+
+.weak-points-comparison {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.weak-column { min-width: 0; }
+.weak-column-title {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.weak-arrow {
+  color: var(--gray-400);
+  font-size: 18px;
+  padding-top: 20px;
+}
+
+.weak-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  margin: 2px;
+}
+
+.weak-tag.baseline { background: #FEE2E2; color: #991B1B; }
+.weak-tag.improved { background: #D1FAE5; color: #065F46; }
+.weak-tag.new { background: #FEF3C7; color: #92400E; }
+.weak-tag.persistent { background: #F3F4F6; color: #6B7280; }
+
+.empty-weak {
+  font-size: 12px;
+  color: var(--gray-400);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.mastery-rate {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gray-200);
+  font-size: 12px;
+  color: var(--gray-600);
+  text-align: center;
+}
+
+.mastery-up { color: var(--success); font-weight: 600; }
+
+/* 准确率徽章 */
+.accuracy-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.accuracy-badge.good { background: #D1FAE5; color: #065F46; }
+.accuracy-badge.ok { background: #FEF3C7; color: #92400E; }
+.accuracy-badge.poor { background: #FEE2E2; color: #991B1B; }
+
+/* 综合分析卡片 */
+.profile-analysis-card {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.profile-analysis-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.profile-analysis-content {
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.95;
+}
+
+.profile-analysis-meta {
+  margin-top: 10px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* 科目列表项 */
+.subject-list-item {
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin: 6px 12px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.subject-list-item:active {
+  transform: scale(0.98);
+}
+
+.subject-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.subject-icon { font-size: 20px; }
+
+.subject-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subject-accuracy {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.subject-bar {
+  width: 60px;
+  height: 6px;
+  background: var(--gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.subject-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.subject-arrow {
+  color: var(--gray-400);
+  font-size: 14px;
+}
+
+/* 进步/退步标签 */
+.progress-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.progress-tag.up { background: #D1FAE5; color: #065F46; }
+.progress-tag.down { background: #FEE2E2; color: #991B1B; }
+.progress-tag.flat { background: var(--gray-100); color: var(--gray-500); }
+
 .lesson-tag.homework  { background: #EEF2FF; color: var(--primary); }
 .lesson-tag.practice  { background: #FEF3C7; color: #92400E; }
 .lesson-tag.test      { background: #FEE2E2; color: #991B1B; }

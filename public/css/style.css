@@ -1008,6 +1008,34 @@ html, body {
   gap: 16px;
 }
 
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-item label {
+  font-size: 14px;
+  color: var(--gray-600);
+}
+
+.form-item input,
+.form-item select,
+.form-item textarea {
+  padding: 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  width: 100%;
+}
+
+.form-item input:focus,
+.form-item select:focus,
+.form-item textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
 .modal-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--gray-100);

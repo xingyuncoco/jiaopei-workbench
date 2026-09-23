@@ -368,11 +368,7 @@ const students = {
           <input type="text" id="studentGrade" placeholder="如：五年级">
         </div>
         <div class="form-item">
-          <label>家长群名称</label>
-          <input type="text" id="studentGroup" placeholder="如：XX妈妈群">
-        </div>
-        <div class="form-item">
-          <label>入学日期</label>
+          <label>入学时间</label>
           <input type="date" id="studentEnrolledAt">
         </div>
         <div class="modal-footer">
@@ -398,11 +394,7 @@ const students = {
           <input type="text" id="studentGrade" value="${student.grade || ''}">
         </div>
         <div class="form-item">
-          <label>家长群名称</label>
-          <input type="text" id="studentGroup" value="${student.group_name || ''}">
-        </div>
-        <div class="form-item">
-          <label>入学日期</label>
+          <label>入学时间</label>
           <input type="date" id="studentEnrolledAt" value="${student.enrolled_at || ''}">
         </div>
         <div class="modal-footer">
@@ -416,7 +408,6 @@ const students = {
   async save(id) {
     const name = document.getElementById('studentName').value.trim();
     const grade = document.getElementById('studentGrade').value.trim();
-    const group_name = document.getElementById('studentGroup').value.trim();
     // 空字符串会被 Postgres 判为非法日期，必须转成 null
     const enrolled_at = document.getElementById('studentEnrolledAt').value || null;
 
@@ -429,10 +420,10 @@ const students = {
 
     try {
       if (id) {
-        await studentsAPI.update(id, { name, grade, group_name, enrolled_at });
+        await studentsAPI.update(id, { name, grade, enrolled_at });
         toast.success('修改成功');
       } else {
-        await studentsAPI.create({ name, grade, group_name, enrolled_at });
+        await studentsAPI.create({ name, grade, enrolled_at });
         toast.success('添加成功');
       }
 

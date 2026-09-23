@@ -174,5 +174,16 @@ export async function onRequestPost(context) {
     return json({ error: 'AI 返回的不是合法 JSON', raw: text.slice(0, 500) }, 502);
   }
 
-  return json({ result: parsed_json });
+  // 确保返回字段完整，兼容旧字段名
+  const result = {
+    correct_count: parsed_json.correct_count ?? parsed_json.correct ?? parsed_json.total ?? 0,
+    wrong_count: parsed_json.wrong_count ?? parsed_json.wrong ?? 0,
+    empty_count: parsed_json.empty_count ?? parsed_json.empty ?? parsed_json.blank ?? 0,
+    total_count: parsed_json.total_count ?? parsed_json.total ?? 0,
+    accuracy: parsed_json.accuracy ?? 0,
+    weak_points: parsed_json.weak_points || [],
+    suggestion: parsed_json.suggestion || parsed_json.advice || '继续保持！'
+  };
+
+  return json({ result });
 }

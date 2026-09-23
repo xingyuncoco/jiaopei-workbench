@@ -1949,38 +1949,70 @@ const profile = {
 
       <!-- 科目列表 -->
       <div class="profile-section-head">
-        <h3>📚 科目详情（点击查看）</h3>
+        <h3>📚 科目详情（点击查看/编辑）</h3>
       </div>
     `;
 
-    if (Object.keys(subjectStats).length === 0) {
-      html += '<div class="empty-state"><p class="empty-state-text">暂无科目数据，请先进行拍照批改</p></div>';
-    } else {
-      // 按准确率排序
-      const sortedSubjects = Object.values(subjectStats).sort((a, b) => b.avgAccuracy - a.avgAccuracy);
-      sortedSubjects.forEach(s => {
-        const trendClass = s.trend > 0 ? 'up' : s.trend < 0 ? 'down' : 'flat';
-        const trendText = s.trend > 0 ? `📈 +${s.trend}%` : s.trend < 0 ? `📉 ${s.trend}%` : '— 持平';
-        const trendBadge = s.trend !== 0 ? `<span class="progress-tag ${trendClass}">${trendText}</span>` : '';
+    // 获取所有科目的基本情况（入学基线）
+    const { data: enrollAssessments } = await supabaseClient
+      .from('assessments')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('assess_type', 'enroll');
 
-        html += `
-          <div class="subject-list-item" onclick="subjectProfile.open('${s.subject.id}', '${s.subject.name}')">
+    // 按科目分组
+    const enrollBySubject = {};
+    (enrollAssessments || []).forEach(a => {
+      enrollBySubject[a.subject_id] = a;
+    });
+
+    // 显示所有科目（包括没有数据的）
+    state.subjects.forEach(s => {
+      const stats = subjectStats[s.id];
+      const enroll = enrollBySubject[s.id];
+      const avgAccuracy = stats ? stats.avgAccuracy : 0;
+      const trend = stats ? stats.trend : 0;
+      const reportCount = stats ? stats.reportCount : 0;
+
+      const trendClass = trend > 0 ? 'up' : trend < 0 ? 'down' : 'flat';
+      const trendText = trend > 0 ? `📈 +${trend}%` : trend < 0 ? `📉 ${trend}%` : '— 持平';
+      const trendBadge = trend !== 0 ? `<span class="progress-tag ${trendClass}">${trendText}</span>` : '';
+
+      // 入学基线信息
+      const enrollInfo = enroll ? `
+        <div class="subject-enroll-info">
+          <span class="enroll-score">入学：${enroll.level || '?'}级</span>
+          ${enroll.weak_points ? `<span class="enroll-weak">薄弱：${enroll.weak_points}</span>` : ''}
+        </div>
+      ` : `<span class="enroll-empty">点击设置基本情况</span>`;
+
+      html += `
+        <div class="subject-card">
+          <div class="subject-card-header" onclick="subjectProfile.open('${s.id}', '${s.name}')">
             <div class="subject-info">
-              <span class="subject-icon">${s.subject.icon || '📝'}</span>
-              <span>${s.subject.name}</span>
+              <span class="subject-icon">${s.icon || '📝'}</span>
+              <span class="subject-name">${s.name}</span>
             </div>
             <div class="subject-stats">
-              <span class="subject-accuracy">${s.avgAccuracy}%</span>
-              <div class="subject-bar">
-                <div class="subject-bar-fill" style="width: ${s.avgAccuracy}%"></div>
-              </div>
-              ${trendBadge}
+              ${reportCount > 0 ? `
+                <span class="subject-accuracy">${avgAccuracy}%</span>
+                <div class="subject-bar">
+                  <div class="subject-bar-fill" style="width: ${avgAccuracy}%"></div>
+                </div>
+                ${trendBadge}
+              ` : `<span class="no-data">暂无批改</span>`}
               <span class="subject-arrow">→</span>
             </div>
           </div>
-        `;
-      });
-    }
+          <div class="subject-card-body">
+            ${enrollInfo}
+            <button class="btn-edit-subject" onclick="profile.editSubjectBasic('${s.id}', '${s.name}', '${enroll?.id || ''}')">
+              ${enroll ? '编辑' : '设置'}
+            </button>
+          </div>
+        </div>
+      `;
+    });
 
     container.innerHTML = html;
   },
@@ -2074,7 +2106,87 @@ const profile = {
     }
   },
 
-  };
+  // 编辑/设置科目基本情况
+  async editSubjectBasic(subjectId, subjectName, assessId) {
+    let currentData = { level: '', weak_points: '', note: '' };
+
+    // 如果有现有数据，先获取
+    if (assessId) {
+      const { data } = await supabaseClient
+        .from('assessments')
+        .select('*')
+        .eq('id', assessId)
+        .single();
+      if (data) {
+        currentData = {
+          level: data.level || '',
+          weak_points: data.weak_points || '',
+          note: data.note || ''
+        };
+      }
+    }
+
+    const levelOptions = LEVEL_LABELS.slice(1)
+      .map((label, i) => `<option value="${i + 1}" ${currentData.level == i + 1 ? 'selected' : ''}>${i + 1} 级 · ${label}</option>`).join('');
+
+    modal.show(`${subjectName} - 基本情况`, `
+      <div class="modal-form">
+        <div class="form-item">
+          <label>入学水平等级 *</label>
+          <select id="basicLevel">${levelOptions}</select>
+        </div>
+        <div class="form-item">
+          <label>初步薄弱点</label>
+          <textarea id="basicWeakPoints" rows="3" placeholder="如：分数运算、应用题审题（仅供参考，以实际作业为准）">${currentData.weak_points}</textarea>
+        </div>
+        <div class="form-item">
+          <label>备注</label>
+          <textarea id="basicNote" rows="2" placeholder="如：入学测试分数、家长反馈等">${currentData.note}</textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="modal.close()">取消</button>
+          <button class="btn btn-primary" onclick="profile.saveSubjectBasic('${subjectId}', '${assessId}')">保存</button>
+        </div>
+      </div>
+    `);
+  },
+
+  async saveSubjectBasic(subjectId, assessId) {
+    const payload = {
+      student_id: state.currentStudentId,
+      subject_id: subjectId,
+      assess_type: 'enroll',
+      assess_date: state.students.find(s => s.id === state.currentStudentId)?.enrolled_at || new Date().toISOString().split('T')[0],
+      level: Number(document.getElementById('basicLevel').value),
+      weak_points: document.getElementById('basicWeakPoints').value.trim() || null,
+      note: document.getElementById('basicNote').value.trim() || null
+    };
+
+    loading.show('保存中...');
+    try {
+      if (assessId) {
+        // 更新现有记录
+        await supabaseClient
+          .from('assessments')
+          .update(payload)
+          .eq('id', assessId);
+        toast.success('已更新');
+      } else {
+        // 新建记录
+        await assessmentsAPI.create(payload);
+        toast.success('已保存');
+      }
+      modal.close();
+      await this.render();
+    } catch (error) {
+      console.error('保存失败:', error);
+      toast.error(error.message);
+    } finally {
+      loading.hide();
+    }
+  }
+
+};
 
 // 科目详情页（成长曲线 + 薄弱点追踪）
 const subjectProfile = {
@@ -2186,37 +2298,35 @@ const subjectProfile = {
         </div>
       </div>
 
-      <!-- 薄弱点追踪 -->
+      <!-- 薄弱点出现频次 -->
       <div class="profile-section-head">
-        <h3>🎯 薄弱点追踪</h3>
+        <h3>🎯 薄弱点统计（出现频次）</h3>
+        <span class="section-hint">频次越高越需要重点练习</span>
       </div>
       <div class="weak-points-card">
-        <div class="weak-points-comparison">
-          <div class="weak-column baseline">
-            <div class="weak-column-title">入学前薄弱点</div>
-            ${baselineWeakPoints.size > 0 
-              ? [...baselineWeakPoints].map(wp => `<div class="weak-tag baseline">❌ ${wp}</div>`).join('')
-              : '<div class="empty-weak">暂无数据</div>'
-            }
-          </div>
-          <div class="weak-arrow">→</div>
-          <div class="weak-column current">
-            <div class="weak-column-title">现在薄弱点</div>
-            ${currentWeakPoints.size > 0
-              ? [...currentWeakPoints].map(wp => {
-                  const isImproved = improvedPoints.includes(wp);
-                  const isNew = newPoints.includes(wp);
-                  if (isImproved) return `<div class="weak-tag improved">✅ ${wp}</div>`;
-                  if (isNew) return `<div class="weak-tag new">❌ ${wp}（新增）</div>`;
-                  return `<div class="weak-tag persistent">⚠️ ${wp}</div>`;
+        <div class="weak-points-list">
+          ${Object.keys(weakPointsMap).length > 0
+            ? Object.entries(weakPointsMap)
+                .sort((a, b) => b[1].count - a[1].count)
+                .map(([wp, info]) => {
+                  const severity = info.count >= 4 ? 'critical' : info.count >= 2 ? 'warning' : 'normal';
+                  return `<div class="weak-point-item ${severity}">
+                    <div class="weak-point-name">${wp}</div>
+                    <div class="weak-point-bar-wrap">
+                      <div class="weak-point-bar" style="width: ${Math.min(info.count * 20, 100)}%"></div>
+                    </div>
+                    <div class="weak-point-count">${info.count}次</div>
+                    <div class="weak-point-status">
+                      ${info.count >= 4 ? '⚠️核心' : info.count >= 2 ? '⚡关注' : '📌新发现'}
+                    </div>
+                  </div>`;
                 }).join('')
-              : '<div class="empty-weak">✅ 已无薄弱点</div>'
-            }
-          </div>
+            : '<div class="empty-weak">暂无薄弱点数据，继续保持！</div>'
+          }
         </div>
-        <div class="mastery-rate">
-          薄弱点掌握度：${masteryRate}% → ${Math.min(currentMasteryRate, 100)}% 
-          ${currentMasteryRate > masteryRate ? `<span class="mastery-up">(+${currentMasteryRate - masteryRate}%)</span>` : ''}
+        <div class="weak-points-summary">
+          共发现 ${Object.keys(weakPointsMap).length} 个薄弱点，
+          其中 <span class="critical-count">⚠️核心薄弱点 ${Object.values(weakPointsMap).filter(w => w.count >= 4).length} 个</span>
         </div>
       </div>
 

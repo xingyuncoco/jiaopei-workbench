@@ -1702,6 +1702,156 @@ html, body {
 .progress-tag.down { background: #FEE2E2; color: #991B1B; }
 .progress-tag.flat { background: var(--gray-100); color: var(--gray-500); }
 
+/* 科目卡片 */
+.subject-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  margin: 6px 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.subject-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.subject-card-header:active {
+  background: var(--gray-50);
+}
+
+.subject-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--gray-100);
+}
+
+.subject-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.subject-enroll-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.enroll-score { color: var(--gray-600); }
+.enroll-weak { color: var(--danger); }
+.enroll-empty {
+  font-size: 12px;
+  color: var(--gray-400);
+  font-style: italic;
+}
+
+.btn-edit-subject {
+  background: none;
+  border: 1px solid var(--gray-300);
+  color: var(--gray-600);
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.btn-edit-subject:active {
+  background: var(--gray-100);
+}
+
+.no-data {
+  font-size: 12px;
+  color: var(--gray-400);
+}
+
+/* 薄弱点频次统计 */
+.section-hint {
+  font-size: 11px;
+  color: var(--gray-400);
+  font-weight: normal;
+}
+
+.weak-points-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weak-point-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.weak-point-item:last-child {
+  border-bottom: none;
+}
+
+.weak-point-name {
+  font-size: 13px;
+  color: var(--gray-700);
+  min-width: 0;
+}
+
+.weak-point-bar-wrap {
+  width: 60px;
+  height: 6px;
+  background: var(--gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.weak-point-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.weak-point-item.critical .weak-point-bar { background: var(--danger); }
+.weak-point-item.warning .weak-point-bar { background: var(--warning); }
+.weak-point-item.normal .weak-point-bar { background: var(--success); }
+
+.weak-point-count {
+  font-size: 11px;
+  color: var(--gray-500);
+  min-width: 30px;
+  text-align: right;
+}
+
+.weak-point-status {
+  font-size: 10px;
+  min-width: 50px;
+  text-align: right;
+}
+
+.weak-point-item.critical .weak-point-status { color: var(--danger); }
+.weak-point-item.warning .weak-point-status { color: var(--warning); }
+.weak-point-item.normal .weak-point-status { color: var(--success); }
+
+.weak-points-summary {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gray-200);
+  font-size: 12px;
+  color: var(--gray-600);
+  text-align: center;
+}
+
+.critical-count {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .lesson-tag.homework  { background: #EEF2FF; color: var(--primary); }
 .lesson-tag.practice  { background: #FEF3C7; color: #92400E; }
 .lesson-tag.test      { background: #FEE2E2; color: #991B1B; }

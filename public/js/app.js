@@ -1692,7 +1692,10 @@ const summary = {
         enrolled_at: student.enrolled_at,
         week_start: weekStart,
         week_end: weekEnd,
-        week_stats: weekStats,
+        // 匹配后端字段名
+        week_daily: weekStats.daily,
+        week_stats_by_subject: weekStats.bySubject,
+        week_weak_points: weekStats.weekWeakPoints,
         assessments: assessRes.assessments.map(a => ({
           subject: a.subject?.name || '已删除科目',
           type: ASSESS_TYPES[a.assess_type] || a.assess_type,

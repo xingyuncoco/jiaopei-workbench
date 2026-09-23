@@ -328,7 +328,7 @@ window.weekStatsAPI = {
         .lte('plan_date', weekEnd),
       supabaseClient
         .from('homework_reports')
-        .select('plan_id, accuracy, plan_date, total_questions, correct_count, wrong_count, blank_count, weak_points, overall_advice, subject:subjects(id, name)')
+        .select('plan_id, accuracy, plan_date, total_count, correct_count, wrong_count, empty_count, weak_points, suggestion, subject:subjects(id, name)')
         .eq('student_id', studentId)
         .gte('plan_date', weekStart)
         .lte('plan_date', weekEnd)
@@ -341,19 +341,24 @@ window.weekStatsAPI = {
     const stats = {}
     ;(plansRes.data || []).forEach(p => {
       const name = p.subject?.name || '未知'
-      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [], weakPoints: new Set(), advices: [] }
+      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [], weakPoints: new Set(), suggestions: [] }
       stats[name].total++
       if (p.is_completed) stats[name].completed++
     })
     ;(reportsRes.data || []).forEach(r => {
       const name = r.subject?.name || '未知'
-      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [], weakPoints: new Set(), advices: [] }
+      if (!stats[name]) stats[name] = { subject: name, total: 0, completed: 0, accuracies: [], weakPoints: new Set(), suggestions: [] }
       if (typeof r.accuracy === 'number') stats[name].accuracies.push(r.accuracy)
-      // 收集薄弱点
-      if (r.weak_points) {
-        String(r.weak_points).split(/[；;]/).map(s => s.trim()).filter(Boolean).forEach(w => stats[name].weakPoints.add(w))
+      // 收集薄弱点（可能是数组或字符串）
+      const weakPoints = r.weak_points;
+      if (weakPoints) {
+        if (Array.isArray(weakPoints)) {
+          weakPoints.forEach(w => stats[name].weakPoints.add(w))
+        } else if (typeof weakPoints === 'string') {
+          weakPoints.split(/[；;]/).map(s => s.trim()).filter(Boolean).forEach(w => stats[name].weakPoints.add(w))
+        }
       }
-      if (r.overall_advice) stats[name].advices.push(r.overall_advice)
+      if (r.suggestion) stats[name].suggestions.push(r.suggestion)
     })
 
     // 按日期聚合（每天的作业情况）
@@ -393,7 +398,7 @@ window.weekStatsAPI = {
           ? Math.round(s.accuracies.reduce((a, b) => a + b, 0) / s.accuracies.length)
           : null,
         weak_points: [...s.weakPoints],
-        advices: s.advices
+        suggestions: s.suggestions
       })),
       daily: dates.map(d => dailyStats[d]),
       weekWeakPoints: [...allWeakPoints]

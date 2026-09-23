@@ -57,38 +57,19 @@ const SYSTEM_PROMPT_DAILY = [
 ].join('\n');
 
 const SYSTEM_PROMPT_WEEKLY = [
-  '你是一名教培机构的资深老师，根据本周学生的学习数据给家长写一份完整的周总结报告。',
+  '你是一名教培机构的老师，给家长写一份简短温暖的周总结。',
   '',
-  '【输出格式要求 - 必须严格遵守】',
-  '分四个部分，每部分用空行分隔，自然段落，不使用 markdown 符号：',
+  '【格式要求】',
+  '分成3段，每段控制在50字以内：',
   '',
-  '一、本周学习情况',
-  '   - 按日期顺序概述每天的学习内容与完成情况',
-  '   - 汇总本周各科作业布置与完成情况',
-  '   - 指出本周出现的主要薄弱点',
-  '',
-  '二、学情变化分析',
-  '   - 对比本周初和周末的学情评估，判断各科目是否有提升/下降/持平',
-  '   - 如有提升，肯定孩子的努力；如有下降，分析原因',
-  '   - 结合本周每日总结中的老师反馈进行综合分析',
-  '',
-  '三、老师本周工作回顾',
-  '   - 总结本周为孩子做的具体教学工作',
-  '   - 对本周教学效果进行客观评价',
-  '',
-  '四、下周计划与家庭配合建议',
-  '   - 制定下周的学习重点和突破方向',
-  '   - 给出 2-3 条具体、可操作的家庭配合行动',
-  '   - 明确家长需要配合的具体事项',
-  '',
-  '【数据使用要求】',
-  '1. 必须引用输入数据中的具体数字和事实，不捏造',
-  '2. 学情变化分析必须基于提供的学情档案对比',
-  '3. 每日总结内容必须结合到分析中',
-  '4. 禁止空泛套话，每一点都要有数据支撑',
+  '第一段：本周表现总结（用一句话概括本周整体表现）',
+  '第二段：重点关注（1-2个需要加强的地方，简明扼要）',
+  '第三段：下周建议（1-2条具体可操作的家庭配合建议）',
   '',
   '【语气要求】',
-  '亲切专业，像和家长面对面沟通；有根有据，让家长放心。'
+  '温暖、亲切、像朋友聊天，不打官腔。',
+  '禁止使用"综上所述""总而言之"等套话。',
+  '直接说重点，家长时间宝贵。'
 ].join('\n');
 
 // 作业情况：单生按日
@@ -163,91 +144,25 @@ function buildDailyPrompt(p) {
   return lines.join('\n');
 }
 
-// 周总结：按学生学情（包含本周每日详情、学情对比、每日总结）
+// 周总结：按学生学情（精简版）
 function buildWeeklyPrompt(p) {
   const lines = [];
-  lines.push(`学生：${p.student_name || '未指定'}（${p.grade || '年级未填'}）`);
-  if (p.enrolled_at) lines.push(`入学日期：${p.enrolled_at}`);
-  lines.push(`总结周期：${p.week_start} 至 ${p.week_end}`);
+  lines.push(`学生：${p.student_name || '未知'}（${p.grade || ''}）`);
+  lines.push(`周期：${p.week_start} 至 ${p.week_end}`);
 
-  // 1. 每日作业完成情况
-  if (p.week_daily && p.week_daily.length) {
-    lines.push('');
-    lines.push('【本周每日作业情况】');
-    const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    p.week_daily.forEach((d, i) => {
-      const dayName = dayNames[i] || `Day${i + 1}`;
-      const date = d.date?.slice(5) || '';  // 只显示月日
-      const status = !d.hasHomework ? '无作业' : (d.completed ? '✓已完成' : '○未完成');
-      const acc = d.accuracy != null ? `，正确率${d.accuracy}%` : '';
-      lines.push(`- ${dayName}(${date})：${status}${acc}`);
-    });
-  }
-
-  // 2. 各科本周汇总数据
+  // 各科汇总（精简）
   if (p.week_stats_by_subject && p.week_stats_by_subject.length) {
-    lines.push('');
-    lines.push('【本周各科作业汇总】');
-    p.week_stats_by_subject.forEach(s => {
-      const acc = s.avg_accuracy != null ? `，平均正确率${s.avg_accuracy}%` : '，未批改';
-      const weak = s.weak_points && s.weak_points.length ? `，薄弱点：${s.weak_points.join('、')}` : '';
-      const pct = s.total ? Math.round((s.completed / s.total) * 100) : 0;
-      lines.push(`- ${s.subject}：完成${s.completed}/${s.total}次（${pct}%）${acc}${weak}`);
-    });
-  } else {
-    lines.push('');
-    lines.push('【本周各科作业汇总】无数据');
+    const summary = p.week_stats_by_subject.map(s => {
+      const acc = s.avg_accuracy != null ? `${s.avg_accuracy}%` : '-';
+      const weak = s.weak_points && s.weak_points.length ? `(${s.weak_points.join('、')})` : '';
+      return `${s.subject}:${acc}${weak}`;
+    }).join(' | ');
+    lines.push(`各科：${summary}`);
   }
 
-  // 3. 本周薄弱点汇总
+  // 薄弱点（精简，最多5个）
   if (p.week_weak_points && p.week_weak_points.length) {
-    lines.push('');
-    lines.push(`【本周薄弱点汇总】${p.week_weak_points.join('、')}`);
-  }
-
-  // 4. 本周每日总结
-  if (p.week_daily_summaries && p.week_daily_summaries.length) {
-    lines.push('');
-    lines.push('【本周每日老师总结】');
-    p.week_daily_summaries.forEach((s, i) => {
-      const dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-      const dayName = dayNames[i] || `Day${i + 1}`;
-      const date = s.period_start?.slice(5) || '';
-      const note = s.teacher_note || s.content?.slice(0, 100) || '无总结';
-      lines.push(`- ${dayName}(${date})：${note.slice(0, 150)}${note.length > 150 ? '...' : ''}`);
-    });
-  } else {
-    lines.push('');
-    lines.push('【本周每日老师总结】暂无');
-  }
-
-  // 5. 学情档案对比（入学基线 vs 当前评估）
-  if (p.assessments && p.assessments.length) {
-    lines.push('');
-    lines.push('【学情档案】');
-    // 找到最早的（入学基线）和最新的评估
-    const sorted = [...p.assessments].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const baseline = sorted[0];
-    const latest = sorted[sorted.length - 1];
-
-    if (baseline) {
-      const weak = baseline.weak_points ? `，薄弱点：${baseline.weak_points}` : '';
-      lines.push(`入学评估（${baseline.date}）：${baseline.subject} ${baseline.type} 水平${baseline.level}级${weak}`);
-    }
-    if (latest && latest !== baseline) {
-      const weak = latest.weak_points ? `，薄弱点：${latest.weak_points}` : '';
-      lines.push(`最新评估（${latest.date}）：${latest.subject} ${latest.type} 水平${latest.level}级${weak}`);
-      if (baseline) {
-        const diff = latest.level - baseline.level;
-        const change = diff > 0 ? `↑提升${diff}级` : diff < 0 ? `↓下降${Math.abs(diff)}级` : '→持平';
-        lines.push(`  → 学情变化：${change}`);
-      }
-    } else if (latest) {
-      lines.push(`当前评估：${latest.subject} 水平${latest.level}级${latest.weak_points ? '，薄弱点：' + latest.weak_points : ''}`);
-    }
-  } else {
-    lines.push('');
-    lines.push('【学情档案】暂无评估记录');
+    lines.push(`薄弱点：${p.week_weak_points.slice(0, 5).join('、')}`);
   }
 
   return lines.join('\n');

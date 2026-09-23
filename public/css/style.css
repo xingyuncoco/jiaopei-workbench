@@ -1779,6 +1779,111 @@ html, body {
   background: rgba(255,255,255,0.2);
 }
 
+/* 周总结报告弹窗 */
+.weekly-report-modal {
+  padding: 0;
+}
+
+.report-header {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  color: white;
+  padding: 16px;
+  margin: -20px -20px 16px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.report-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.report-period {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.report-content {
+  padding: 12px 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--gray-700);
+}
+
+.report-content p {
+  margin-bottom: 8px;
+}
+
+.report-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--gray-200);
+  font-size: 11px;
+  color: var(--gray-400);
+}
+
+/* 周总结提示卡片 */
+.profile-analysis-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+.profile-analysis-hint.success {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.profile-analysis-hint.warning {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.profile-analysis-hint.empty {
+  background: var(--gray-100);
+  color: var(--gray-500);
+}
+
+.hint-icon {
+  font-size: 24px;
+}
+
+.hint-text {
+  flex: 1;
+}
+
+.hint-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hint-sub {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.btn-view-summary, .btn-goto-summary {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-view-summary {
+  background: white;
+  color: #065F46;
+}
+
+.btn-goto-summary {
+  background: var(--primary);
+  color: white;
+}
+
 /* 科目卡片 */
 .subject-card {
   background: var(--white);

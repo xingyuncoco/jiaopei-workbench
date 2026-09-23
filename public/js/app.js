@@ -2001,17 +2001,8 @@ const profile = {
         </div>
       `;
     } else {
-      // 有数据但未生成周总结
-      analysisHintHtml = `
-        <div class="profile-analysis-hint warning">
-          <div class="hint-icon">⏰</div>
-          <div class="hint-text">
-            <div class="hint-title">本周 ${weekReports?.length || 0} 次批改待生成报告</div>
-            <div class="hint-sub">去「总结」页面生成周总结，包含综合分析</div>
-          </div>
-          <button class="btn-goto-summary" onclick="router.navigate('summary')">去生成</button>
-        </div>
-      `;
+      // 有数据但未生成周总结 - 不显示提示
+      analysisHintHtml = '';
     }
 
     let html = `

@@ -890,33 +890,25 @@ function minutesBetween(start, end) {
 }
 
 // 科目管理页面
-async function initSubjectsPage() {
-  await loadSubjects();
-}
-
-async function loadSubjects() {
-  const listEl = document.getElementById('subjectsList');
-
-  if (state.subjects.length === 0) {
-    listEl.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📚</div>
-        <p class="empty-state-text">暂无科目，点击右上角添加</p>
-      </div>
-    `;
-    return;
-  }
-
-  let html = '';
-  state.subjects.forEach(subject => {
-    html += `
-      <div class="list-item">
-        <div class="list-item-info">
-          <span style="font-size:24px">${subject.icon}</span>
+    // 生成错题列表 HTML
+    let errorsHtml = '';
+    const errors = report.errors_detail || [];
+    if (errors.length > 0) {
+      errorsHtml = `
+        <div class="error-list">
+          <h4 style="margin-bottom:12px">❌ 错题分析：</h4>
+          ${errors.map(err => `
+            <div class="error-item">
+              <h4>第${err.question_number}题</h4>
+              <p>学生答案：${err.student_answer}</p>
+              <p>正确答案：${err.correct_answer}</p>
+              <p>分析：${err.analysis}</p>
+            </div>
+          `).join('')}
           <div class="list-item-name">${subject.name}</div>
         </div>
         <div class="list-item-actions">
-          <button class="list-item-btn" onclick="subjects.showEditModal('${subject.id}')">✏️</button>
+      errorsHtml = '<p style="text-align:center;color:var(--success);padding:20px">🎉 全部正确，继续保持！</p>';
           <button class="list-item-btn" onclick="subjects.confirmDelete('${subject.id}')">🗑️</button>
         </div>
       </div>
@@ -931,24 +923,14 @@ const subjects = {
   _renderIcons(selectedIcon) {
     const icons = ['📐', '📝', '📖', '🔬', '⚡', '🧪', '🎨', '🎵', '🏀', '🗣️', '💻', '🌍', '☕', '🍱', '⏸️'];
     return icons.map(icon =>
-      `<div class="icon-option ${icon === selectedIcon ? 'active' : ''}" data-icon="${icon}">${icon}</div>`
-    ).join('');
-  },
-
-  showAddModal() {
-    modal.show('添加科目', `
+        <div class="accuracy-label">正确率 (${report.correct_count}/${report.total_count})</div>
       <div class="modal-form">
         <div class="form-item">
-          <label>科目名称 *</label>
-          <input type="text" id="subjectName" placeholder="如：数学 / 休息">
-        </div>
-        <div class="form-item">
-          <label>选择图标</label>
-          <div class="icon-picker" id="iconPicker">${this._renderIcons('📝')}</div>
+      ${errorsHtml}
         </div>
         <div class="form-item">
           <label>
-            <input type="checkbox" id="subjectIsBreak">
+        <p>${report.suggestion}</p>
             标记为休息科目
           </label>
         </div>

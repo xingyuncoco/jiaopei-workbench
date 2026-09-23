@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS students (
     grade           VARCHAR(20),
     group_name      VARCHAR(100),
     avatar_url      TEXT,
+    -- 家长绑定字段（后期家长端使用）
+    parent_ids      TEXT[],                    -- 家长ID列表（微信openid等）
+    bind_code       VARCHAR(10) UNIQUE,        -- 绑定码，家长扫码用
+    -- 学情档案汇总（自动更新）
+    latest_scores   JSONB DEFAULT '{}',        -- 各科目最新评分
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -48,11 +53,20 @@ CREATE TABLE IF NOT EXISTS homework_reports (
     plan_id         UUID REFERENCES homework_plans(id) ON DELETE SET NULL,
     plan_date       DATE NOT NULL DEFAULT CURRENT_DATE,
     image_url       TEXT,
-    correct_count   INTEGER,
-    total_count     INTEGER,
-    accuracy        DECIMAL(5,2),
-    errors_detail   JSONB,
+    -- 基础统计（精简版）
+    correct_count   INTEGER DEFAULT 0,
+    wrong_count     INTEGER DEFAULT 0,           -- 错误题数
+    empty_count     INTEGER DEFAULT 0,           -- 空题数
+    total_count     INTEGER DEFAULT 0,
+    accuracy        DECIMAL(5,2) DEFAULT 0,
+    -- 薄弱点分析（精简版）
+    weak_points     TEXT[],                       -- ['分数运算', '应用题审题']
     suggestion      TEXT,
+    -- 推送状态（后期家长端使用）
+    is_published    BOOLEAN DEFAULT FALSE,         -- 是否已推送给家长
+    published_at    TIMESTAMPTZ,
+    -- 兼容旧字段（保留但不再使用）
+    errors_detail   JSONB,
     full_report     TEXT,
     batch_id        UUID,  -- 同一批次多张照片共用一个 batch_id
     created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -179,3 +193,59 @@ CREATE INDEX IF NOT EXISTS idx_summary_created_at ON summary_history(created_at)
 
 -- user_profiles 表索引
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
+
+-- =============================================
+-- 如果表已存在，执行迁移添加新字段
+-- =============================================
+
+-- students 表添加家长绑定字段
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'students' AND column_name = 'parent_ids') THEN
+        ALTER TABLE students ADD COLUMN parent_ids TEXT[];
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'students' AND column_name = 'bind_code') THEN
+        ALTER TABLE students ADD COLUMN bind_code VARCHAR(10) UNIQUE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'students' AND column_name = 'latest_scores') THEN
+        ALTER TABLE students ADD COLUMN latest_scores JSONB DEFAULT '{}';
+    END IF;
+END $$;
+
+-- homework_reports 表添加新字段
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'homework_reports' AND column_name = 'wrong_count') THEN
+        ALTER TABLE homework_reports ADD COLUMN wrong_count INTEGER DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'homework_reports' AND column_name = 'empty_count') THEN
+        ALTER TABLE homework_reports ADD COLUMN empty_count INTEGER DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'homework_reports' AND column_name = 'weak_points') THEN
+        ALTER TABLE homework_reports ADD COLUMN weak_points TEXT[];
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'homework_reports' AND column_name = 'is_published') THEN
+        ALTER TABLE homework_reports ADD COLUMN is_published BOOLEAN DEFAULT FALSE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'homework_reports' AND column_name = 'published_at') THEN
+        ALTER TABLE homework_reports ADD COLUMN published_at TIMESTAMPTZ;
+    END IF;
+END $$;
+
+-- =============================================
+-- 生成绑定码的函数
+-- =============================================
+
+CREATE OR REPLACE FUNCTION generate_bind_code()
+RETURNS VARCHAR(10) AS $$
+DECLARE
+    chars TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    result VARCHAR(10) := '';
+    i INTEGER;
+BEGIN
+    FOR i IN 1..6 LOOP
+        result := result || substr(chars, floor(random() * length(chars) + 1)::integer, 1);
+    END LOOP;
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
